@@ -1,4 +1,4 @@
-# Docker Compose for ADK Agent with Ollama
+# Docker Compose for ADK Agent with Ollama and PostgreSQL
 #
 # Usage:
 #   docker-compose up -d        # Start services
@@ -9,6 +9,25 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database for Session Storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-sessions
+    environment:
+      POSTGRES_USER: vishal_agent
+      POSTGRES_PASSWORD: vishal_agent_secret
+      POSTGRES_DB: vishal_agent_sessions
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vishal_agent -d vishal_agent_sessions"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ADK Agent Service (Production)
   adk-agent:
     image: ghcr.io/vishal-pandey/vishal_agent:latest
@@ -22,13 +41,15 @@ services:
       # Point to Ollama - use 'ollama' service name if using the ollama service below
       # Or 'host.docker.internal' if Ollama runs on host machine
       - OLLAMA_API_BASE=http://host.docker.internal:11434
-      # Number of worker processes (adjust based on CPU cores: 2-4 x cores)
+      # PostgreSQL connection for session storage (enables multi-worker scaling)
+      - DATABASE_URL=postgresql+asyncpg://vishal_agent:vishal_agent_secret@postgres:5432/vishal_agent_sessions
+      # Number of worker processes (can scale with PostgreSQL session storage)
       - WORKERS=4
       # Timeout for long-running streaming requests
       - TIMEOUT=120
-    # Uncomment if using the ollama service below
-    # depends_on:
-    #   - ollama
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -56,6 +77,7 @@ services:
       - "8001:8001"
     environment:
       - OLLAMA_API_BASE=http://host.docker.internal:11434
+      - DATABASE_URL=postgresql+asyncpg://vishal_agent:vishal_agent_secret@postgres:5432/vishal_agent_sessions
       - WORKERS=2
       - TIMEOUT=120
     command: >
@@ -67,6 +89,9 @@ services:
       --keep-alive 5
       --access-logfile -
       --error-logfile -
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/.well-known/agent-card.json"]
@@ -104,5 +129,6 @@ services:
   #   #           capabilities: [gpu]
   #   restart: unless-stopped
 
-# volumes:
-#   ollama_data:
+volumes:
+  postgres_data:
+  # ollama_data:

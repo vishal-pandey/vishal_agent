@@ -7,3 +7,7 @@ python-dotenv>=1.0.0
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 gunicorn>=23.0.0
+
+# Database session storage (PostgreSQL)
+asyncpg>=0.29.0
+sqlalchemy>=2.0.0

@@ -40,7 +40,10 @@ EXPOSE 8000 8001
 # Default environment variables
 # Override OLLAMA_API_BASE to point to your Ollama instance
 ENV OLLAMA_API_BASE=http://host.docker.internal:11434 \
-    # Number of worker processes (adjust based on CPU cores)
+    # PostgreSQL connection URL for session storage (optional)
+    # If not set, falls back to InMemorySessionService
+    # DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db
+    # Number of worker processes (scalable with PostgreSQL session storage)
     WORKERS=4 \
     # Worker timeout for long-running requests (streaming)
     TIMEOUT=120
@@ -49,8 +52,7 @@ ENV OLLAMA_API_BASE=http://host.docker.internal:11434 \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/docs || exit 1
 
-# Production command - uvicorn with multiple workers for concurrency
-# Use gunicorn as process manager with uvicorn workers for best performance
+# Production command - uvicorn with gunicorn process manager
 CMD gunicorn vishal_agent.server:app \
     --worker-class uvicorn.workers.UvicornWorker \
     --workers ${WORKERS} \

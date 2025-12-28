@@ -6,6 +6,10 @@ This module creates a production-ready FastAPI application that exposes:
 2. /run_sse - Streaming agent execution (SSE)
 3. /a2a/* - A2A protocol endpoints
 
+Session storage:
+- Uses PostgreSQL via DatabaseSessionService for production (scalable, multi-worker)
+- Falls back to InMemorySessionService if DATABASE_URL is not set (development)
+
 For production deployment with multiple workers:
     gunicorn vishal_agent.server:app -w 4 -k uvicorn.workers.UvicornWorker
 
@@ -23,7 +27,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.genai import types
 
@@ -33,8 +36,19 @@ from .agent import root_agent
 # Session Management
 # ============================================
 
-# Use in-memory sessions (for production, consider Redis or database-backed sessions)
-session_service = InMemorySessionService()
+# Check for DATABASE_URL environment variable
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+if DATABASE_URL:
+    # Use PostgreSQL for production (supports multiple workers)
+    from google.adk.sessions import DatabaseSessionService
+    print(f"🗄️ Using DatabaseSessionService with PostgreSQL")
+    session_service = DatabaseSessionService(db_url=DATABASE_URL)
+else:
+    # Fallback to in-memory for development
+    from google.adk.sessions import InMemorySessionService
+    print("⚠️ Using InMemorySessionService (sessions not shared between workers)")
+    session_service = InMemorySessionService()
 
 # Create runner
 runner = Runner(
@@ -42,6 +56,23 @@ runner = Runner(
     app_name=root_agent.name,
     session_service=session_service
 )
+
+
+async def ensure_session(user_id: str, session_id: str):
+    """Ensure session exists, create if not."""
+    try:
+        return await session_service.get_session(
+            app_name=root_agent.name,
+            user_id=user_id,
+            session_id=session_id
+        )
+    except Exception:
+        return await session_service.create_session(
+            app_name=root_agent.name,
+            user_id=user_id,
+            session_id=session_id
+        )
+
 
 # ============================================
 # Request/Response Models
@@ -129,19 +160,8 @@ async def run_agent(request: RunRequest):
     
     session_id = request.session_id or f"session-{uuid.uuid4().hex[:8]}"
     
-    # Ensure session exists
-    try:
-        await session_service.get_session(
-            app_name=root_agent.name,
-            user_id=request.user_id,
-            session_id=session_id
-        )
-    except:
-        await session_service.create_session(
-            app_name=root_agent.name,
-            user_id=request.user_id,
-            session_id=session_id
-        )
+    # Ensure session exists (handles multi-worker scenarios)
+    await ensure_session(request.user_id, session_id)
     
     # Prepare message
     content = types.Content(
@@ -153,19 +173,39 @@ async def run_agent(request: RunRequest):
     events = []
     final_response = None
     
-    async for event in runner.run_async(
-        user_id=request.user_id,
-        session_id=session_id,
-        new_message=content
-    ):
-        events.append({
-            "author": getattr(event, 'author', None),
-            "content": event.content.model_dump() if event.content else None,
-            "is_final": event.is_final_response()
-        })
-        
-        if event.is_final_response() and event.content and event.content.parts:
-            final_response = event.content.parts[0].text
+    try:
+        async for event in runner.run_async(
+            user_id=request.user_id,
+            session_id=session_id,
+            new_message=content
+        ):
+            events.append({
+                "author": getattr(event, 'author', None),
+                "content": event.content.model_dump() if event.content else None,
+                "is_final": event.is_final_response()
+            })
+            
+            if event.is_final_response() and event.content and event.content.parts:
+                final_response = event.content.parts[0].text
+    except ValueError as e:
+        if "Session not found" in str(e):
+            # Session was lost, recreate and retry
+            await ensure_session(request.user_id, session_id)
+            async for event in runner.run_async(
+                user_id=request.user_id,
+                session_id=session_id,
+                new_message=content
+            ):
+                events.append({
+                    "author": getattr(event, 'author', None),
+                    "content": event.content.model_dump() if event.content else None,
+                    "is_final": event.is_final_response()
+                })
+                
+                if event.is_final_response() and event.content and event.content.parts:
+                    final_response = event.content.parts[0].text
+        else:
+            raise
     
     return {
         "session_id": session_id,
@@ -179,20 +219,6 @@ async def run_agent_sse(request: RunRequest):
     
     session_id = request.session_id or f"session-{uuid.uuid4().hex[:8]}"
     
-    # Ensure session exists
-    try:
-        await session_service.get_session(
-            app_name=root_agent.name,
-            user_id=request.user_id,
-            session_id=session_id
-        )
-    except:
-        await session_service.create_session(
-            app_name=root_agent.name,
-            user_id=request.user_id,
-            session_id=session_id
-        )
-    
     # Prepare message
     content = types.Content(
         role=request.new_message.role,
@@ -203,26 +229,56 @@ async def run_agent_sse(request: RunRequest):
         """Generate SSE events"""
         import json
         
+        # Always ensure session exists inside the generator
+        # This handles multi-worker scenarios where session might not exist in this worker
+        await ensure_session(request.user_id, session_id)
+        
         # Enable SSE streaming mode for token-by-token streaming
         run_config = RunConfig(streaming_mode=StreamingMode.SSE)
         
-        async for event in runner.run_async(
-            user_id=request.user_id,
-            session_id=session_id,
-            new_message=content,
-            run_config=run_config
-        ):
-            event_data = {
-                "author": getattr(event, 'author', None),
-                "is_final": event.is_final_response(),
-            }
-            
-            if event.content and event.content.parts:
-                for part in event.content.parts:
-                    if hasattr(part, 'text') and part.text:
-                        event_data["text"] = part.text
-            
-            yield f"data: {json.dumps(event_data)}\n\n"
+        try:
+            async for event in runner.run_async(
+                user_id=request.user_id,
+                session_id=session_id,
+                new_message=content,
+                run_config=run_config
+            ):
+                event_data = {
+                    "author": getattr(event, 'author', None),
+                    "is_final": event.is_final_response(),
+                }
+                
+                if event.content and event.content.parts:
+                    for part in event.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            event_data["text"] = part.text
+                
+                yield f"data: {json.dumps(event_data)}\n\n"
+        except ValueError as e:
+            if "Session not found" in str(e):
+                # Session was lost between ensure and run, recreate and retry
+                await ensure_session(request.user_id, session_id)
+                async for event in runner.run_async(
+                    user_id=request.user_id,
+                    session_id=session_id,
+                    new_message=content,
+                    run_config=run_config
+                ):
+                    event_data = {
+                        "author": getattr(event, 'author', None),
+                        "is_final": event.is_final_response(),
+                    }
+                    
+                    if event.content and event.content.parts:
+                        for part in event.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                event_data["text"] = part.text
+                    
+                    yield f"data: {json.dumps(event_data)}\n\n"
+            else:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
         
         yield "data: [DONE]\n\n"
     
