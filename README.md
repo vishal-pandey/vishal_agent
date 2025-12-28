@@ -1,6 +1,11 @@
 # ADK Agent with Ollama Llama 3.2
 
+[![Docker Image](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml)
+[![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-vishal--pandey%2Fvishal__agent-blue)](https://ghcr.io/vishal-pandey/vishal_agent)
+
 A simple ADK agent powered by Llama 3.2 running locally via Ollama and LiteLLM.
+
+**Repository:** https://github.com/vishal-pandey/vishal_agent
 
 ## Features
 
@@ -122,14 +127,17 @@ llama/
 ### Build and Run with Docker
 
 ```bash
-# Build the image
+# Build the image locally
 docker build -t adk-agent .
 
+# Or pull from GitHub Container Registry
+docker pull ghcr.io/vishal-pandey/vishal_agent:latest
+
 # Run with ADK Web (connects to Ollama on host)
-docker run -p 8000:8000 -e OLLAMA_API_BASE=http://host.docker.internal:11434 adk-agent
+docker run -p 8000:8000 -e OLLAMA_API_BASE=http://host.docker.internal:11434 ghcr.io/vishal-pandey/vishal_agent:latest
 
 # Run with A2A server instead
-docker run -p 8001:8001 -e OLLAMA_API_BASE=http://host.docker.internal:11434 adk-agent \
+docker run -p 8001:8001 -e OLLAMA_API_BASE=http://host.docker.internal:11434 ghcr.io/vishal-pandey/vishal_agent:latest \
   uvicorn vishal_agent.agent:a2a_app --host 0.0.0.0 --port 8001
 ```
 

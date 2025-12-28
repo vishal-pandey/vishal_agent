@@ -10,6 +10,7 @@ version: '3.8'
 services:
   # ADK Agent Service
   adk-agent:
+    image: ghcr.io/vishal-pandey/vishal_agent:latest
     build:
       context: .
       dockerfile: Dockerfile
