@@ -4,11 +4,12 @@
 #   docker-compose up -d        # Start services
 #   docker-compose logs -f      # View logs
 #   docker-compose down         # Stop services
+#   docker-compose up -d --scale adk-agent=3  # Scale to 3 instances
 
 version: '3.8'
 
 services:
-  # ADK Agent Service
+  # ADK Agent Service (Production)
   adk-agent:
     image: ghcr.io/vishal-pandey/vishal_agent:latest
     build:
@@ -16,34 +17,73 @@ services:
       dockerfile: Dockerfile
     container_name: adk-agent
     ports:
-      - "8000:8000"  # ADK Web UI
-      - "8001:8001"  # A2A Protocol
+      - "8000:8000"  # API Server
     environment:
       # Point to Ollama - use 'ollama' service name if using the ollama service below
       # Or 'host.docker.internal' if Ollama runs on host machine
       - OLLAMA_API_BASE=http://host.docker.internal:11434
+      # Number of worker processes (adjust based on CPU cores: 2-4 x cores)
+      - WORKERS=4
+      # Timeout for long-running streaming requests
+      - TIMEOUT=120
     # Uncomment if using the ollama service below
     # depends_on:
     #   - ollama
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # A2A Server (separate service for A2A protocol)
+  a2a-server:
+    image: ghcr.io/vishal-pandey/vishal_agent:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: a2a-server
+    ports:
+      - "8001:8001"
+    environment:
+      - OLLAMA_API_BASE=http://host.docker.internal:11434
+      - WORKERS=2
+      - TIMEOUT=120
+    command: >
+      gunicorn vishal_agent.agent:a2a_app
+      --worker-class uvicorn.workers.UvicornWorker
+      --workers 2
+      --bind 0.0.0.0:8001
+      --timeout 120
+      --keep-alive 5
+      --access-logfile -
+      --error-logfile -
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/.well-known/agent-card.json"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # A2A Server (alternative to ADK web)
-  # Uncomment to run A2A server instead of/alongside ADK web
-  # a2a-server:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   container_name: a2a-server
+  # Load Balancer (for scaling multiple instances)
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: nginx-lb
   #   ports:
-  #     - "8001:8001"
-  #   environment:
-  #     - OLLAMA_API_BASE=http://host.docker.internal:11434
-  #   command: ["uvicorn", "vishal_agent.agent:a2a_app", "--host", "0.0.0.0", "--port", "8001"]
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - adk-agent
   #   restart: unless-stopped
 
   # Ollama Service (optional - uncomment if you want Ollama in Docker too)

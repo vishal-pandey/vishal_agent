@@ -2,13 +2,63 @@
 
 This guide covers how to interact with your ADK agent via the REST API endpoints.
 
+## Server Modes
+
+| Mode | Command | Use Case |
+|------|---------|----------|
+| Development | `adk web .` | Local development with UI |
+| Production | `gunicorn vishal_agent.server:app -w 4 -k uvicorn.workers.UvicornWorker` | Production deployment |
+| A2A Only | `uvicorn vishal_agent.agent:a2a_app --host 0.0.0.0 --port 8001` | A2A protocol only |
+
+## Production Deployment
+
+### Using Docker (Recommended)
+
+```bash
+# Pull and run
+docker pull ghcr.io/vishal-pandey/vishal_agent:latest
+docker run -p 8000:8000 -e OLLAMA_API_BASE=http://host.docker.internal:11434 -e WORKERS=4 ghcr.io/vishal-pandey/vishal_agent:latest
+
+# Or with docker-compose
+docker-compose up -d
+```
+
+### Manual Production Server
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run with gunicorn (4 workers)
+gunicorn vishal_agent.server:app \
+  --worker-class uvicorn.workers.UvicornWorker \
+  --workers 4 \
+  --bind 0.0.0.0:8000 \
+  --timeout 120
+```
+
+### Scaling Guidelines
+
+| CPU Cores | Recommended Workers |
+|-----------|---------------------|
+| 1 | 2 |
+| 2 | 4 |
+| 4 | 8-12 |
+| 8+ | 16-24 |
+
+Formula: `workers = 2-4 × CPU cores`
+
+---
+
 ## Prerequisites
 
-1. Start the ADK web server:
+1. Start the server (choose one):
    ```bash
-   cd /Users/vishal/Developer/llama
-   source .venv/bin/activate
+   # Development
    adk web .
+   
+   # Production  
+   gunicorn vishal_agent.server:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
    ```
 
 2. The server runs on `http://localhost:8000` by default.
