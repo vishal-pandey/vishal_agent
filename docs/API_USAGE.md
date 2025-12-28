@@ -2,6 +2,16 @@
 
 This guide covers how to interact with your ADK agent via the REST API endpoints.
 
+## Live Demo
+
+🌐 **Production URL:** https://vishal-agent.codeshare.co.in
+
+You can use all the examples below with either:
+- `http://localhost:8000` (local development)
+- `https://vishal-agent.codeshare.co.in` (production)
+
+---
+
 ## Server Modes
 
 | Mode | Command | Use Case |
@@ -81,12 +91,20 @@ Formula: `workers = 2-4 × CPU cores`
 
 ## Step-by-Step Usage
 
+> **Tip:** Replace `http://localhost:8000` with `https://vishal-agent.codeshare.co.in` to use the live demo.
+
 ### 1. Create a Session
 
 Before sending messages, you must create a session:
 
 ```bash
+# Local
 curl -X POST "http://localhost:8000/apps/vishal_agent/users/user-1/sessions/session-1" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Production
+curl -X POST "https://vishal-agent.codeshare.co.in/apps/vishal_agent/users/user-1/sessions/session-1" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```

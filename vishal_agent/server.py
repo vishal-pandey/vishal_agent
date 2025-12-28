@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
+from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.genai import types
 
 from .agent import root_agent
@@ -202,10 +203,14 @@ async def run_agent_sse(request: RunRequest):
         """Generate SSE events"""
         import json
         
+        # Enable SSE streaming mode for token-by-token streaming
+        run_config = RunConfig(streaming_mode=StreamingMode.SSE)
+        
         async for event in runner.run_async(
             user_id=request.user_id,
             session_id=session_id,
-            new_message=content
+            new_message=content,
+            run_config=run_config
         ):
             event_data = {
                 "author": getattr(event, 'author', None),

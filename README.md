@@ -2,10 +2,12 @@
 
 [![Docker Image](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml)
 [![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-vishal--pandey%2Fvishal__agent-blue)](https://ghcr.io/vishal-pandey/vishal_agent)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-vishal--agent.codeshare.co.in-green)](https://vishal-agent.codeshare.co.in)
 
 A simple ADK agent powered by Llama 3.2 running locally via Ollama and LiteLLM.
 
-**Repository:** https://github.com/vishal-pandey/vishal_agent
+**Repository:** https://github.com/vishal-pandey/vishal_agent  
+**Live Demo:** https://vishal-agent.codeshare.co.in
 
 ## Features
 
@@ -13,8 +15,35 @@ A simple ADK agent powered by Llama 3.2 running locally via Ollama and LiteLLM.
 - ✅ Works with Google ADK web interface (`adk web`)
 - ✅ Exposes agent via A2A protocol for multi-agent systems
 - ✅ Supports streaming responses
+- 🌐 **Live Demo**: https://vishal-agent.codeshare.co.in
 
-## Prerequisites
+## Try it Live
+
+No setup required! Try the agent directly:
+
+```bash
+# 1. Create a session
+curl -X POST "https://vishal-agent.codeshare.co.in/apps/vishal_agent/users/demo/sessions/demo-session" \
+  -H "Content-Type: application/json" -d '{}'
+
+# 2. Chat with the agent
+curl -X POST "https://vishal-agent.codeshare.co.in/run_sse" \
+  -H "Content-Type: application/json" \
+  --no-buffer \
+  -d '{
+    "app_name": "vishal_agent",
+    "user_id": "demo",
+    "session_id": "demo-session",
+    "new_message": {"role": "user", "parts": [{"text": "Hello!"}]},
+    "streaming": true
+  }'
+```
+
+---
+
+## Local Setup
+
+### Prerequisites
 
 1. **Ollama** installed and running with Llama 3.2:
    ```bash
