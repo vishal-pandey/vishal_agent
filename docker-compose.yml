@@ -1,0 +1,67 @@
+# Docker Compose for ADK Agent with Ollama
+#
+# Usage:
+#   docker-compose up -d        # Start services
+#   docker-compose logs -f      # View logs
+#   docker-compose down         # Stop services
+
+version: '3.8'
+
+services:
+  # ADK Agent Service
+  adk-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: adk-agent
+    ports:
+      - "8000:8000"  # ADK Web UI
+      - "8001:8001"  # A2A Protocol
+    environment:
+      # Point to Ollama - use 'ollama' service name if using the ollama service below
+      # Or 'host.docker.internal' if Ollama runs on host machine
+      - OLLAMA_API_BASE=http://host.docker.internal:11434
+    # Uncomment if using the ollama service below
+    # depends_on:
+    #   - ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # A2A Server (alternative to ADK web)
+  # Uncomment to run A2A server instead of/alongside ADK web
+  # a2a-server:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: a2a-server
+  #   ports:
+  #     - "8001:8001"
+  #   environment:
+  #     - OLLAMA_API_BASE=http://host.docker.internal:11434
+  #   command: ["uvicorn", "vishal_agent.agent:a2a_app", "--host", "0.0.0.0", "--port", "8001"]
+  #   restart: unless-stopped
+
+  # Ollama Service (optional - uncomment if you want Ollama in Docker too)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   # GPU support (uncomment for NVIDIA GPUs)
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: 1
+  #   #           capabilities: [gpu]
+  #   restart: unless-stopped
+
+# volumes:
+#   ollama_data:

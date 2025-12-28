@@ -1,0 +1,4 @@
+# Core dependencies
+google-adk[a2a]>=1.21.0
+litellm>=1.80.0
+python-dotenv>=1.0.0
