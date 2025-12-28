@@ -1,6 +1,6 @@
-# ADK API Usage Guide
+# Portfolio Assistant API Usage Guide
 
-This guide covers how to interact with your ADK agent via the REST API endpoints.
+This guide covers how to interact with Vishal's Portfolio AI Assistant via the REST API endpoints.
 
 ## Live Demo
 
@@ -9,6 +9,23 @@ This guide covers how to interact with your ADK agent via the REST API endpoints
 You can use all the examples below with either:
 - `http://localhost:8000` (local development)
 - `https://vishal-agent.codeshare.co.in` (production)
+
+## What Can You Ask?
+
+The assistant can answer questions about:
+- 💼 **Experience**: Current role at Lumiq, previous work at LimeChat and AirTrik
+- 🚀 **Skills**: Full-stack development, cloud infrastructure, leadership
+- 📊 **Projects**: emPower pryzm, LimeChat, AirTrik IoT, and personal projects
+- 🎓 **Education**: B.Tech + M.Tech in AI & Robotics
+- 📧 **Contact**: Email, phone, LinkedIn, GitHub
+
+**Example Questions:**
+- "What does Vishal do?"
+- "Tell me about his experience at LimeChat"
+- "What are his technical skills?"
+- "Show me his projects"
+- "How can I contact him?"
+- "What's his email?"
 
 ---
 
@@ -99,12 +116,12 @@ Before sending messages, you must create a session:
 
 ```bash
 # Local
-curl -X POST "http://localhost:8000/apps/vishal_agent/users/user-1/sessions/session-1" \
+curl -X POST "http://localhost:8000/apps/vishal_assistant/users/user-1/sessions/session-1" \
   -H "Content-Type: application/json" \
   -d '{}'
 
 # Production
-curl -X POST "https://vishal-agent.codeshare.co.in/apps/vishal_agent/users/user-1/sessions/session-1" \
+curl -X POST "https://vishal-agent.codeshare.co.in/apps/vishal_assistant/users/user-1/sessions/session-1" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -113,7 +130,7 @@ curl -X POST "https://vishal-agent.codeshare.co.in/apps/vishal_agent/users/user-
 ```json
 {
   "id": "session-1",
-  "app_name": "vishal_agent",
+  "app_name": "vishal_assistant",
   "user_id": "user-1",
   "state": {},
   "events": [],
@@ -121,21 +138,55 @@ curl -X POST "https://vishal-agent.codeshare.co.in/apps/vishal_agent/users/user-
 }
 ```
 
-### 2. Send Message with Streaming (SSE)
-
-Use `/run_sse` for Server-Sent Events streaming:
+### 2. Ask About Vishal's Experience
 
 ```bash
 curl -X POST http://localhost:8000/run_sse \
   -H "Content-Type: application/json" \
   --no-buffer \
   -d '{
-    "app_name": "vishal_agent",
+    "app_name": "vishal_assistant",
     "user_id": "user-1",
     "session_id": "session-1",
     "new_message": {
       "role": "user",
-      "parts": [{"text": "Tell me a short joke"}]
+      "parts": [{"text": "What does Vishal do at Lumiq?"}]
+    },
+    "streaming": true
+  }'
+```
+
+### 3. Ask About Technical Skills
+
+```bash
+curl -X POST http://localhost:8000/run_sse \
+  -H "Content-Type: application/json" \
+  --no-buffer \
+  -d '{
+    "app_name": "vishal_assistant",
+    "user_id": "user-1",
+    "session_id": "session-1",
+    "new_message": {
+      "role": "user",
+      "parts": [{"text": "What are his main technical skills?"}]
+    },
+    "streaming": true
+  }'
+```
+
+### 4. Get Contact Information
+
+```bash
+curl -X POST http://localhost:8000/run_sse \
+  -H "Content-Type: application/json" \
+  --no-buffer \
+  -d '{
+    "app_name": "vishal_assistant",
+    "user_id": "user-1",
+    "session_id": "session-1",
+    "new_message": {
+      "role": "user",
+      "parts": [{"text": "How can I contact Vishal?"}]
     },
     "streaming": true
   }'
@@ -143,13 +194,13 @@ curl -X POST http://localhost:8000/run_sse \
 
 **Response (SSE stream):**
 ```
-data: {"content":{"parts":[{"text":"Here"}],"role":"model"},...}
-data: {"content":{"parts":[{"text":"'s"}],"role":"model"},...}
+data: {"content":{"parts":[{"text":"Vishal"}],"role":"model"},...}
+data: {"content":{"parts":[{"text":" is"}],"role":"model"},...}
 data: {"content":{"parts":[{"text":" a"}],"role":"model"},...}
 ...
 ```
 
-### 3. Send Message without Streaming
+### 5. Send Message without Streaming
 
 Use `/run` for a single response:
 
@@ -157,29 +208,29 @@ Use `/run` for a single response:
 curl -X POST http://localhost:8000/run \
   -H "Content-Type: application/json" \
   -d '{
-    "app_name": "vishal_agent",
+    "app_name": "vishal_assistant",
     "user_id": "user-1",
     "session_id": "session-1",
     "new_message": {
       "role": "user",
-      "parts": [{"text": "What is 2 + 2?"}]
+      "parts": [{"text": "Tell me about his projects"}]
     },
     "streaming": false
   }'
 ```
 
-### 4. Get Session History
+### 6. Get Session History
 
 Retrieve conversation history:
 
 ```bash
-curl -X GET "http://localhost:8000/apps/vishal_agent/users/user-1/sessions/session-1"
+curl -X GET "http://localhost:8000/apps/vishal_assistant/users/user-1/sessions/session-1"
 ```
 
-### 5. List All Sessions
+### 7. List All Sessions
 
 ```bash
-curl -X GET "http://localhost:8000/apps/vishal_agent/users/user-1/sessions"
+curl -X GET "http://localhost:8000/apps/vishal_assistant/users/user-1/sessions"
 ```
 
 ---
@@ -188,9 +239,9 @@ curl -X GET "http://localhost:8000/apps/vishal_agent/users/user-1/sessions"
 
 ```bash
 #!/bin/bash
-# complete_chat.sh - Create session and chat with agent
+# complete_chat.sh - Create session and chat with portfolio assistant
 
-APP_NAME="vishal_agent"
+APP_NAME="vishal_assistant"
 USER_ID="user-1"
 SESSION_ID="session-$(date +%s)"
 BASE_URL="http://localhost:8000"
@@ -201,8 +252,8 @@ curl -s -X POST "$BASE_URL/apps/$APP_NAME/users/$USER_ID/sessions/$SESSION_ID" \
   -H "Content-Type: application/json" \
   -d '{}' > /dev/null
 
-# 2. Send message with streaming
-echo -e "\nSending message with SSE streaming...\n"
+# 2. Ask about Vishal's experience
+echo -e "\nAsking about Vishal's experience...\n"
 curl -X POST "$BASE_URL/run_sse" \
   -H "Content-Type: application/json" \
   --no-buffer \
@@ -212,7 +263,7 @@ curl -X POST "$BASE_URL/run_sse" \
     \"session_id\": \"$SESSION_ID\",
     \"new_message\": {
       \"role\": \"user\",
-      \"parts\": [{\"text\": \"Hello! What can you help me with?\"}]
+      \"parts\": [{\"text\": \"Tell me about Vishal's work at LimeChat\"}]
     },
     \"streaming\": true
   }"

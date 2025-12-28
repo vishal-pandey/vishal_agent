@@ -1,21 +1,32 @@
-# ADK Agent with Ollama Llama 3.2
+# Vishal's Portfolio AI Assistant
 
 [![Docker Image](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml)
 [![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-vishal--pandey%2Fvishal__agent-blue)](https://ghcr.io/vishal-pandey/vishal_agent)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-vishal--agent.codeshare.co.in-green)](https://vishal-agent.codeshare.co.in)
 
-A simple ADK agent powered by Llama 3.2 running locally via Ollama and LiteLLM.
+A personal AI assistant for Vishal Pandey's portfolio that answers questions about his experience, skills, projects, and professional background. Powered by Llama 3.2 running locally via Ollama and LiteLLM.
 
 **Repository:** https://github.com/vishal-pandey/vishal_agent  
 **Live Demo:** https://vishal-agent.codeshare.co.in
 
 ## Features
 
+- ✅ Personal portfolio assistant - knows everything about Vishal Pandey
 - ✅ Runs locally with Ollama - no API costs, complete privacy
 - ✅ Works with Google ADK web interface (`adk web`)
 - ✅ Exposes agent via A2A protocol for multi-agent systems
 - ✅ Supports streaming responses
 - 🌐 **Live Demo**: https://vishal-agent.codeshare.co.in
+
+## What Can You Ask?
+
+The assistant can answer questions about:
+- 💼 **Experience**: Current role at Lumiq, previous work at LimeChat and AirTrik
+- 🚀 **Skills**: Full-stack development, cloud infrastructure, leadership
+- 📊 **Projects**: emPower pryzm, LimeChat, AirTrik IoT, and personal projects
+- 🎓 **Education**: B.Tech + M.Tech in AI & Robotics
+- 📧 **Contact**: Email, phone, LinkedIn, GitHub
+- 🎯 **Philosophy**: Approach to building products and leading teams
 
 ## Try it Live
 
@@ -23,18 +34,42 @@ No setup required! Try the agent directly:
 
 ```bash
 # 1. Create a session
-curl -X POST "https://vishal-agent.codeshare.co.in/apps/vishal_agent/users/demo/sessions/demo-session" \
+curl -X POST "https://vishal-agent.codeshare.co.in/apps/vishal_assistant/users/demo/sessions/demo-session" \
   -H "Content-Type: application/json" -d '{}'
 
-# 2. Chat with the agent
+# 2. Ask about Vishal's experience
 curl -X POST "https://vishal-agent.codeshare.co.in/run_sse" \
   -H "Content-Type: application/json" \
   --no-buffer \
   -d '{
-    "app_name": "vishal_agent",
+    "app_name": "vishal_assistant",
     "user_id": "demo",
     "session_id": "demo-session",
-    "new_message": {"role": "user", "parts": [{"text": "Hello!"}]},
+    "new_message": {"role": "user", "parts": [{"text": "What does Vishal do?"}]},
+    "streaming": true
+  }'
+
+# 3. Ask about skills
+curl -X POST "https://vishal-agent.codeshare.co.in/run_sse" \
+  -H "Content-Type: application/json" \
+  --no-buffer \
+  -d '{
+    "app_name": "vishal_assistant",
+    "user_id": "demo",
+    "session_id": "demo-session",
+    "new_message": {"role": "user", "parts": [{"text": "What are his technical skills?"}]},
+    "streaming": true
+  }'
+
+# 4. Get contact information
+curl -X POST "https://vishal-agent.codeshare.co.in/run_sse" \
+  -H "Content-Type: application/json" \
+  --no-buffer \
+  -d '{
+    "app_name": "vishal_assistant",
+    "user_id": "demo",
+    "session_id": "demo-session",
+    "new_message": {"role": "user", "parts": [{"text": "How can I contact Vishal?"}]},
     "streaming": true
   }'
 ```
@@ -79,7 +114,7 @@ Run the agent with the ADK development UI:
 adk web .
 ```
 
-Then open http://localhost:8000 and select `vishal_agent` from the dropdown.
+Then open http://localhost:8000 and select `vishal_assistant` from the dropdown.
 
 ### Option 2: A2A Protocol Server
 

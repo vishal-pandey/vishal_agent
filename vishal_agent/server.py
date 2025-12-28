@@ -82,8 +82,8 @@ async def lifespan(app: FastAPI):
 # ============================================
 
 app = FastAPI(
-    title="ADK Agent API",
-    description="Production API for ADK Agent with Ollama Llama 3.2",
+    title="Vishal's Portfolio Assistant API",
+    description="Personal AI assistant for Vishal Pandey's portfolio - answers questions about his experience, skills, and projects",
     version="1.0.0",
     lifespan=lifespan,
 )
