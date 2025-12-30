@@ -2,7 +2,7 @@
 
 [![Docker Image](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml)
 [![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-vishal--pandey%2Fvishal__agent-blue)](https://ghcr.io/vishal-pandey/vishal_agent)
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-vishal--agent.codeshare.co.in-green)](https://vishal-agent.codeshare.co.in)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-vishal--agent.codeshare.co.in-green)](https://www.vishalpandey.co.in)
 
 A personal AI assistant for Vishal Pandey's portfolio that answers questions about his experience, skills, projects, and professional background. Powered by Llama 3.2 running locally via Ollama and LiteLLM.
 
