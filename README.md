@@ -1,4 +1,4 @@
-# Vishal's Portfolio AI Assistant Dashboard
+# Vishal's Portfolio AI Assistant
 
 [![Docker Image](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/vishal-pandey/vishal_agent/actions/workflows/docker-publish.yml)
 [![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-vishal--pandey%2Fvishal__agent-blue)](https://ghcr.io/vishal-pandey/vishal_agent)
