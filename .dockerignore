@@ -25,6 +25,7 @@ build/
 # Git
 .git/
 .gitignore
+.gitattributes
 
 # OS
 .DS_Store
@@ -36,11 +37,29 @@ Thumbs.db
 # Tests
 tests/
 test_*.py
+test_rag.py
 
-# Documentation (optional - remove if you want docs in image)
-# docs/
+# Documentation
+docs/
+README.md
+*.md
 
 # Docker
 Dockerfile
 docker-compose.yml
 .dockerignore
+
+# Kubernetes
+k8s/
+
+# Scripts not needed in production
+setup_rag.sh
+
+# Environment files
+.env
+.env.example
+.env.local
+
+# CI/CD
+.github/
+.gitlab-ci.yml

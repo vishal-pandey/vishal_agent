@@ -48,7 +48,7 @@ root_agent = Agent(
     model=LiteLlm(model=MODEL),
     description="Vishal's witty AI sidekick - knows everything about him, answers with humor, and occasionally roasts him" + 
                 (" - Enhanced with RAG for additional knowledge retrieval" if rag_enabled else ""),
-    tools=tools if tools else None,
+    tools=tools,  # Pass empty list instead of None
     instruction="""You are Vishal's AI assistant with a fun, witty personality. Think of yourself as his digital hype-man who can also roast him when asked.
 
 ## YOUR PERSONALITY 🎭

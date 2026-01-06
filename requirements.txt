@@ -13,9 +13,10 @@ asyncpg>=0.29.0
 sqlalchemy>=2.0.0
 
 # RAG & Vector Database
-langchain>=0.1.0
-langchain-community>=0.0.20
+# NOTE: Removed langchain/langchain-community (not used, adds 2GB+)
 pgvector>=0.2.4
 psycopg2-binary>=2.9.9
 sentence-transformers>=2.2.2
-tiktoken>=0.5.2
+
+# Only if you need tiktoken for token counting
+# tiktoken>=0.5.2

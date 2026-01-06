@@ -7,7 +7,6 @@ through the vector database and retrieve relevant context.
 
 import os
 from typing import Optional
-from google.adk.agents import ToolContext
 
 # Import vector store - will be initialized lazily
 _vector_store = None
@@ -34,8 +33,7 @@ def get_vector_store_instance():
 
 async def retrieve_context(
     query: str,
-    num_results: int = 3,
-    tool_context: Optional[ToolContext] = None
+    num_results: int = 3
 ) -> str:
     """
     Retrieve relevant context from the knowledge base using vector similarity search.
@@ -46,7 +44,6 @@ async def retrieve_context(
     Args:
         query: The search query to find relevant documents
         num_results: Number of relevant documents to retrieve (default: 3)
-        tool_context: ADK tool context (automatically provided)
     
     Returns:
         Relevant context from the knowledge base, or a message if nothing is found

@@ -1,29 +1,64 @@
 # ADK Agent with Ollama - Dockerfile
 # 
-# This Dockerfile builds the ADK agent. Note that Ollama must be
-# accessible from the container (either running on host or as a separate container).
+# Multi-stage build to reduce final image size
+# Stage 1: Build dependencies and download models
+# Stage 2: Runtime with only necessary files
 
+# ============================================
+# Stage 1: Builder - Install dependencies and download models
+# ============================================
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies to /install
+RUN pip install --no-cache-dir --prefix=/install \
+    -r requirements.txt \
+    gunicorn
+
+# Pre-download the embedding model to /install/models
+# This prevents downloading during runtime and allows us to control the model location
+RUN python -c "\
+from sentence_transformers import SentenceTransformer; \
+import os; \
+os.makedirs('/install/models', exist_ok=True); \
+model = SentenceTransformer('all-MiniLM-L6-v2', cache_folder='/install/models'); \
+print('Model downloaded successfully')"
+
+# ============================================
+# Stage 2: Runtime - Minimal production image
+# ============================================
 FROM python:3.12-slim
 
-# Set working directory
 WORKDIR /app
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # Tell sentence-transformers to use our pre-downloaded model
+    SENTENCE_TRANSFORMERS_HOME=/app/models
 
-# Install system dependencies
+# Install only runtime dependencies (curl for healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy installed packages from builder
+COPY --from=builder /install /usr/local
 
-# Install Python dependencies (including gunicorn for production)
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+# Copy pre-downloaded models from builder
+COPY --from=builder /install/models /app/models
 
 # Copy application code
 COPY vishal_agent/ ./vishal_agent/
