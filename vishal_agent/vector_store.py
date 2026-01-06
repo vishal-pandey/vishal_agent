@@ -189,6 +189,8 @@ class VectorStore:
                 for content, metadata, embedding in zip(contents, metadatas, embeddings):
                     # Convert metadata dict to JSON string for JSONB column
                     metadata_json = json.dumps(metadata) if metadata else None
+                    # Convert embedding list to string format for pgvector
+                    embedding_str = f"[{','.join(str(x) for x in embedding)}]"
                     
                     doc_id = await conn.fetchval(
                         f"""
@@ -198,7 +200,7 @@ class VectorStore:
                         """,
                         content,
                         metadata_json,
-                        embedding
+                        embedding_str
                     )
                     doc_ids.append(doc_id)
         
@@ -224,8 +226,9 @@ class VectorStore:
         if not self.pool:
             await self.initialize()
         
-        # Generate query embedding
+        # Generate query embedding and convert to pgvector string format
         query_embedding = self.embed_text(query)
+        embedding_str = f"[{','.join(str(x) for x in query_embedding)}]"
         
         async with self.pool.acquire() as conn:
             # Use cosine similarity (1 - cosine_distance)
@@ -239,7 +242,7 @@ class VectorStore:
                 ORDER BY embedding <=> $1
                 LIMIT $2
                 """,
-                query_embedding,
+                embedding_str,
                 k
             )
         
