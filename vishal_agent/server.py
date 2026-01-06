@@ -185,8 +185,13 @@ async def run_agent(request: RunRequest):
                 "is_final": event.is_final_response()
             })
             
+            # Only extract text from final response with actual text content
+            # Skip function_call parts - we want the final text response
             if event.is_final_response() and event.content and event.content.parts:
-                final_response = event.content.parts[0].text
+                for part in event.content.parts:
+                    if hasattr(part, 'text') and part.text:
+                        final_response = part.text
+                        break
     except ValueError as e:
         if "Session not found" in str(e):
             # Session was lost, recreate and retry
@@ -202,8 +207,12 @@ async def run_agent(request: RunRequest):
                     "is_final": event.is_final_response()
                 })
                 
+                # Only extract text from final response with actual text content
                 if event.is_final_response() and event.content and event.content.parts:
-                    final_response = event.content.parts[0].text
+                    for part in event.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            final_response = part.text
+                            break
         else:
             raise
     
