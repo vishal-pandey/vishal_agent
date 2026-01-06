@@ -11,6 +11,7 @@ with the pgvector extension. It supports:
 import os
 from typing import List, Optional, Tuple
 import asyncio
+import json
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -186,6 +187,9 @@ class VectorStore:
             doc_ids = []
             async with conn.transaction():
                 for content, metadata, embedding in zip(contents, metadatas, embeddings):
+                    # Convert metadata dict to JSON string for JSONB column
+                    metadata_json = json.dumps(metadata) if metadata else None
+                    
                     doc_id = await conn.fetchval(
                         f"""
                         INSERT INTO {self.table_name} (content, metadata, embedding)
@@ -193,7 +197,7 @@ class VectorStore:
                         RETURNING id
                         """,
                         content,
-                        metadata,
+                        metadata_json,
                         embedding
                     )
                     doc_ids.append(doc_id)
