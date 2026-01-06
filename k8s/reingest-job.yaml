@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vishal-agent-reingest
+  namespace: default
+spec:
+  ttlSecondsAfterFinished: 300  # Clean up after 5 minutes
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: reingest
+        image: ghcr.io/vishal-pandey/vishal_agent:latest
+        imagePullPolicy: Always
+        command: ["python", "-m", "scripts.k8s_init_ingest"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: vishal-agent-secrets
+              key: DATABASE_URL
+        - name: KNOWLEDGE_BASE_PATH
+          value: "/app/knowledge_base"
+        - name: INGEST_MODE
+          value: "replace"
+        - name: FAIL_ON_INGEST_ERROR
+          value: "true"
+        volumeMounts:
+        - name: knowledge-base
+          mountPath: /app/knowledge_base
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+      volumes:
+      - name: knowledge-base
+        configMap:
+          name: vishal-agent-knowledge-base

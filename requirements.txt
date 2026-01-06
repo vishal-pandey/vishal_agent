@@ -11,3 +11,11 @@ gunicorn>=23.0.0
 # Database session storage (PostgreSQL)
 asyncpg>=0.29.0
 sqlalchemy>=2.0.0
+
+# RAG & Vector Database
+langchain>=0.1.0
+langchain-community>=0.0.20
+pgvector>=0.2.4
+psycopg2-binary>=2.9.9
+sentence-transformers>=2.2.2
+tiktoken>=0.5.2

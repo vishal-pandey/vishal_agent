@@ -9,9 +9,9 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database for Session Storage
+  # PostgreSQL Database for Session Storage + Vector Store (pgvector)
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: postgres-sessions
     environment:
       POSTGRES_USER: vishal_agent
@@ -19,6 +19,7 @@ services:
       POSTGRES_DB: vishal_agent_sessions
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
     ports:
       - "5432:5432"
     restart: unless-stopped

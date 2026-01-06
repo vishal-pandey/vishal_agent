@@ -3,6 +3,7 @@ ADK Agent with Ollama Llama 3.2 via LiteLLM
 
 A simple helpful assistant that runs locally using Ollama.
 Supports both ADK web interface and A2A protocol.
+Now enhanced with RAG for retrieving additional context from documents.
 """
 
 import os
@@ -21,13 +22,33 @@ os.environ.setdefault("OLLAMA_API_BASE", "http://localhost:11434")
 MODEL = "ollama_chat/llama3.2:latest"
 
 # ============================================
+# Import RAG Tools (optional - only if DATABASE_URL is set)
+# ============================================
+
+tools = []
+rag_enabled = False
+
+try:
+    if os.environ.get("DATABASE_URL"):
+        from vishal_agent.rag_tools import retrieve_context
+        tools.append(retrieve_context)
+        rag_enabled = True
+        print("✅ RAG enabled - agent can retrieve from knowledge base")
+    else:
+        print("ℹ️ RAG disabled - DATABASE_URL not set (agent will work without RAG)")
+except ImportError as e:
+    print(f"⚠️ RAG tools not available: {e}")
+
+# ============================================
 # Create the ADK Agent
 # ============================================
 
 root_agent = Agent(
     name="vishal_assistant",
     model=LiteLlm(model=MODEL),
-    description="Vishal's witty AI sidekick - knows everything about him, answers with humor, and occasionally roasts him",
+    description="Vishal's witty AI sidekick - knows everything about him, answers with humor, and occasionally roasts him" + 
+                (" - Enhanced with RAG for additional knowledge retrieval" if rag_enabled else ""),
+    tools=tools if tools else None,
     instruction="""You are Vishal's AI assistant with a fun, witty personality. Think of yourself as his digital hype-man who can also roast him when asked.
 
 ## YOUR PERSONALITY 🎭

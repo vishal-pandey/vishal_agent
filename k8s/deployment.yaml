@@ -1,0 +1,192 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vishal-agent-knowledge-base
+  namespace: default
+data:
+  example.txt: |
+    # Example Knowledge Base
+    
+    This is a sample document to demonstrate RAG capabilities.
+    
+    ## Vishal's Favorite Technologies
+    
+    Vishal is particularly passionate about:
+    - Serverless architectures and edge computing
+    - Real-time data streaming with Apache Kafka
+    - Building developer tools and CLI applications
+    - Container orchestration with Kubernetes
+    
+    ## His Development Philosophy
+    
+    He believes in:
+    - Writing clean, maintainable code
+    - Comprehensive testing and CI/CD
+    - Open source contributions
+    - Learning in public and sharing knowledge
+    
+    ## Recent Interests (2026)
+    
+    - Exploring AI agents and multi-agent systems
+    - Building with local LLMs using Ollama
+    - Contributing to the Model Context Protocol (MCP)
+    - Experimenting with RAG and vector databases
+    
+    ## Fun Projects
+    
+    Some of his experimental projects include:
+    - A peer-to-peer serverless chat using WebRTC
+    - Retro games in vanilla JavaScript
+    - NFC-based digital business cards
+    - This AI assistant you're talking to!
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vishal-agent-secrets
+  namespace: default
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql+asyncpg://vishal_agent:vishal_agent_secret@postgres-service:5432/vishal_agent_sessions"
+  OLLAMA_API_BASE: "http://your-macbook-m1-ip:11434"  # Update with your M1 Mac IP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vishal-agent
+  namespace: default
+  labels:
+    app: vishal-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vishal-agent
+  template:
+    metadata:
+      labels:
+        app: vishal-agent
+      annotations:
+        # Force pod restart on ConfigMap change
+        checksum/config: "{{ include (print $.Template.BasePath \"/configmap.yaml\") . | sha256sum }}"
+    spec:
+      # Init container to ingest documents before app starts
+      initContainers:
+      - name: ingest-documents
+        image: ghcr.io/vishal-pandey/vishal_agent:latest
+        imagePullPolicy: Always
+        command: ["python", "-m", "scripts.k8s_init_ingest"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: vishal-agent-secrets
+              key: DATABASE_URL
+        - name: KNOWLEDGE_BASE_PATH
+          value: "/app/knowledge_base"
+        - name: INGEST_MODE
+          value: "replace"  # Options: replace, append
+        - name: FAIL_ON_INGEST_ERROR
+          value: "false"  # Set to "true" to fail deployment on ingest error
+        volumeMounts:
+        - name: knowledge-base
+          mountPath: /app/knowledge_base
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+      
+      # Main application container
+      containers:
+      - name: vishal-agent
+        image: ghcr.io/vishal-pandey/vishal_agent:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: vishal-agent-secrets
+              key: DATABASE_URL
+        - name: OLLAMA_API_BASE
+          valueFrom:
+            secretKeyRef:
+              name: vishal-agent-secrets
+              key: OLLAMA_API_BASE
+        - name: WORKERS
+          value: "4"
+        - name: TIMEOUT
+          value: "120"
+        volumeMounts:
+        - name: knowledge-base
+          mountPath: /app/knowledge_base
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      
+      volumes:
+      - name: knowledge-base
+        configMap:
+          name: vishal-agent-knowledge-base
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vishal-agent-service
+  namespace: default
+spec:
+  selector:
+    app: vishal-agent
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vishal-agent-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+  - hosts:
+    - vishal-agent.yourdomain.com
+    secretName: vishal-agent-tls
+  rules:
+  - host: vishal-agent.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vishal-agent-service
+            port:
+              number: 80

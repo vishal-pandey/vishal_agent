@@ -16,6 +16,7 @@ A personal AI assistant for Vishal Pandey's portfolio that answers questions abo
 - ✅ Works with Google ADK web interface (`adk web`)
 - ✅ Exposes agent via A2A protocol for multi-agent systems
 - ✅ Supports streaming responses
+- ✅ **RAG Support** - Retrieve context from custom documents using pgvector
 - 🌐 **Live Demo**: https://vishal-agent.codeshare.co.in
 
 ## What Can You Ask?
@@ -27,6 +28,7 @@ The assistant can answer questions about:
 - 🎓 **Education**: B.Tech + M.Tech in AI & Robotics
 - 📧 **Contact**: Email, phone, LinkedIn, GitHub
 - 🎯 **Philosophy**: Approach to building products and leading teams
+- 📚 **Custom Knowledge** (with RAG): Any documents you ingest into the vector database
 
 ## Try it Live
 
@@ -173,18 +175,52 @@ curl -X POST http://localhost:8001 \
 ## Project Structure
 
 ```
-llama/
+vishal_agent/
 ├── vishal_agent/
 │   ├── __init__.py
-│   ├── agent.py      # Main agent definition + A2A app
-│   └── .env          # Environment config
+│   ├── agent.py          # Main agent definition with RAG tools
+│   ├── server.py         # FastAPI server with REST endpoints
+│   ├── vector_store.py   # pgvector integration for RAG
+│   └── rag_tools.py      # RAG retrieval tool for agent
+├── scripts/
+│   └── ingest_documents.py  # Document ingestion CLI
 ├── docs/
-│   └── API_USAGE.md  # REST API documentation
-├── Dockerfile        # Docker image
-├── docker-compose.yml
+│   ├── API_USAGE.md      # REST API documentation
+│   └── RAG_SETUP.md      # RAG setup and usage guide
+├── knowledge_base/       # Example documents for RAG
+│   └── example.txt
+├── Dockerfile            # Docker image
+├── docker-compose.yml    # PostgreSQL + pgvector + agent
+├── init-pgvector.sql     # pgvector initialization
 ├── requirements.txt
 └── README.md
 ```
+
+## RAG (Retrieval-Augmented Generation) 🔍
+
+Enhance the agent with custom knowledge by ingesting documents into pgvector:
+
+```bash
+# 1. Start PostgreSQL with pgvector
+docker-compose up -d postgres
+
+# 2. Set DATABASE_URL in .env
+echo 'DATABASE_URL=postgresql+asyncpg://vishal_agent:vishal_agent_secret@localhost:5432/vishal_agent_sessions' >> .env
+
+# 3. Ingest documents
+python -m scripts.ingest_documents --source knowledge_base/ --pattern "*.txt"
+
+# 4. Run the agent (RAG automatically enabled)
+uvicorn vishal_agent.server:app --reload
+```
+
+**What RAG enables:**
+- 📚 Search through custom documents and knowledge bases
+- 🔍 Agent retrieves relevant context before answering
+- 📊 Provides citations and sources
+- 🎯 Handles queries beyond hardcoded knowledge
+
+See [docs/RAG_SETUP.md](docs/RAG_SETUP.md) for complete guide.
 
 ## Docker Usage
 

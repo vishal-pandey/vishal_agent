@@ -1,0 +1,38 @@
+# Example Knowledge Base
+
+This is a sample document to demonstrate RAG capabilities.
+
+## Vishal's Favorite Technologies
+
+Vishal is particularly passionate about:
+- Serverless architectures and edge computing
+- Real-time data streaming with Apache Kafka
+- Building developer tools and CLI applications
+- Container orchestration with Kubernetes
+
+## His Development Philosophy
+
+He believes in:
+- Writing clean, maintainable code
+- Comprehensive testing and CI/CD
+- Open source contributions
+- Learning in public and sharing knowledge
+
+## Recent Interests (2026)
+
+- Exploring AI agents and multi-agent systems
+- Building with local LLMs using Ollama
+- Contributing to the Model Context Protocol (MCP)
+- Experimenting with RAG and vector databases
+
+## Fun Projects
+
+Some of his experimental projects include:
+- A peer-to-peer serverless chat using WebRTC
+- Retro games in vanilla JavaScript
+- NFC-based digital business cards
+- This AI assistant you're talking to!
+
+
+## First Science Teacher
+- Vishal First Teacher name was Vinod Sir

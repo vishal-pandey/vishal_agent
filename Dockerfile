@@ -28,8 +28,18 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 # Copy application code
 COPY vishal_agent/ ./vishal_agent/
 
+# Copy scripts for document ingestion (including k8s init script)
+COPY scripts/ ./scripts/
+
+# Copy knowledge_base (can be overridden by ConfigMap in k8s)
+COPY knowledge_base/ ./knowledge_base/
+
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash agent
+
+# Change ownership of app directory
+USER root
+RUN chown -R agent:agent /app
 USER agent
 
 # Expose ports
