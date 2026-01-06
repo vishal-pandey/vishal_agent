@@ -6,6 +6,7 @@ through the vector database and retrieve relevant context.
 """
 
 import os
+import time
 from typing import Optional
 
 # Import vector store - will be initialized lazily
@@ -56,6 +57,9 @@ async def retrieve_context(
     Returns:
         Relevant context from documents, or a message if nothing found.
     """
+    start_time = time.time()
+    print(f"🔍 RAG retrieve_context called: query='{query}', num_results={num_results}")
+    
     # Validate query - don't search with empty or very short queries
     if not query or len(query.strip()) < 3:
         return "Query too short. Please provide a more specific search query."
@@ -68,15 +72,18 @@ async def retrieve_context(
         num_results = 3
     
     try:
-        # Get vector store
+        # Get vector store (should be pre-initialized at startup)
         vector_store = get_vector_store_instance()
         
-        # Initialize if needed
+        # Initialize if needed (fallback if not pre-initialized)
         if not vector_store.pool:
+            print("⚠️ Vector store not pre-initialized, initializing now...")
             await vector_store.initialize()
         
         # Search for similar documents
+        search_start = time.time()
         results = await vector_store.similarity_search(query, k=num_results)
+        print(f"⏱️ Similarity search took {time.time() - search_start:.2f}s, found {len(results)} results")
         
         if not results:
             return "No relevant information found in the knowledge base for this query."
@@ -84,12 +91,15 @@ async def retrieve_context(
         # Format results
         context_parts = []
         for i, (content, metadata, score) in enumerate(results, 1):
-            source = metadata.get('source', 'unknown')
+            source = metadata.get('source', 'unknown') if isinstance(metadata, dict) else 'unknown'
             context_parts.append(
                 f"[Source {i}: {source} (relevance: {score:.2f})]\n{content}\n"
             )
         
         context = "\n---\n".join(context_parts)
+        
+        total_time = time.time() - start_time
+        print(f"✅ RAG retrieve_context completed in {total_time:.2f}s")
         
         return f"""Retrieved {len(results)} relevant documents from knowledge base:
 
@@ -98,6 +108,7 @@ async def retrieve_context(
 Use this information to answer the user's question. Cite the sources when appropriate."""
         
     except Exception as e:
+        print(f"❌ RAG retrieve_context error: {e}")
         return f"Error retrieving context: {str(e)}"
 
 

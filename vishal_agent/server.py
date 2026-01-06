@@ -104,9 +104,32 @@ async def lifespan(app: FastAPI):
     # Startup
     print(f"🚀 Starting ADK Agent Server: {root_agent.name}")
     print(f"📡 Ollama API Base: {os.environ.get('OLLAMA_API_BASE', 'not set')}")
+    
+    # Pre-initialize RAG vector store if DATABASE_URL is set
+    if DATABASE_URL:
+        try:
+            from vishal_agent.rag_tools import get_vector_store_instance
+            print("🔧 Pre-initializing RAG vector store...")
+            vector_store = get_vector_store_instance()
+            await vector_store.initialize()
+            print("✅ RAG vector store ready for queries")
+        except Exception as e:
+            print(f"⚠️ RAG pre-initialization failed: {e}")
+    
     yield
+    
     # Shutdown
     print("👋 Shutting down ADK Agent Server")
+    
+    # Cleanup vector store connection pool
+    if DATABASE_URL:
+        try:
+            from vishal_agent.rag_tools import get_vector_store_instance
+            vector_store = get_vector_store_instance()
+            await vector_store.close()
+            print("✅ Vector store connections closed")
+        except Exception:
+            pass
 
 # ============================================
 # FastAPI Application
