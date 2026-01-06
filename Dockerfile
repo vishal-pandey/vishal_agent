@@ -51,8 +51,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    # Tell sentence-transformers to use our pre-downloaded model
-    SENTENCE_TRANSFORMERS_HOME=/app/models
+    # Tell sentence-transformers and HuggingFace to use our pre-downloaded model
+    SENTENCE_TRANSFORMERS_HOME=/app/models \
+    HF_HOME=/app/models \
+    TRANSFORMERS_CACHE=/app/models \
+    MODEL_CACHE_DIR=/app/models
 
 # Install only runtime dependencies (curl for healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \

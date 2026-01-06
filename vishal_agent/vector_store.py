@@ -14,6 +14,14 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 
+# Set environment variables for model caching BEFORE importing sentence_transformers
+# This ensures models are loaded from /app/models in Docker
+MODEL_CACHE = os.environ.get("MODEL_CACHE_DIR", "/app/models")
+if os.path.exists(MODEL_CACHE):
+    os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", MODEL_CACHE)
+    os.environ.setdefault("HF_HOME", MODEL_CACHE)
+    os.environ.setdefault("TRANSFORMERS_CACHE", MODEL_CACHE)
+
 import asyncpg
 from sentence_transformers import SentenceTransformer
 
@@ -42,9 +50,18 @@ class VectorStore:
         self.dimension = dimension
         self.pool: Optional[asyncpg.Pool] = None
         
-        # Initialize embedding model
+        # Initialize embedding model using pre-cached model if available
         print(f"Loading embedding model: {embedding_model}")
-        self.embedding_model = SentenceTransformer(embedding_model)
+        
+        # Check for pre-cached model in /app/models (Docker) or use default cache
+        model_cache = os.environ.get("MODEL_CACHE_DIR", "/app/models")
+        if os.path.exists(model_cache):
+            print(f"📂 Using model cache: {model_cache}")
+            self.embedding_model = SentenceTransformer(embedding_model, cache_folder=model_cache)
+        else:
+            print("📂 Using default HuggingFace cache")
+            self.embedding_model = SentenceTransformer(embedding_model)
+        
         print(f"✅ Embedding model loaded (dimension: {self.dimension})")
     
     async def initialize(self):
