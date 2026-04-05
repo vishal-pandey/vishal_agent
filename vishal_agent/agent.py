@@ -18,7 +18,7 @@ load_dotenv()
 os.environ.setdefault("OLLAMA_API_BASE", "http://localhost:11434")
 
 # Model constant - using ollama_chat provider as recommended by ADK docs
-MODEL = "ollama_chat/llama3.2:latest"
+MODEL = "ollama_chat/gemma4:26b"
 
 # ============================================
 # Create the ADK Agent
