@@ -1,5 +1,9 @@
 # Core dependencies
-google-adk[a2a]>=1.21.0
+# Pinned: a2a-sdk 1.x is protobuf-backed and drops the camelCase aliases this
+# code relies on (AgentCapabilities.pushNotifications, AgentCard.url), so an
+# unpinned build breaks at import. These are the versions running in v0.0.22.
+google-adk[a2a]==1.28.1
+a2a-sdk==0.3.25
 litellm>=1.80.0
 python-dotenv>=1.0.0
 
