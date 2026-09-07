@@ -12,7 +12,7 @@ conforms to the model, not the other way round.
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 
@@ -25,6 +25,17 @@ EVENT_TYPE_SLUG = "30min"
 ATTENDEE_TZ = "UTC"  # start_time is always ISO-8601 UTC; see module docstring
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]+$")
+
+
+def _make_client() -> httpx.Client:
+    """Build the HTTP client. Tests monkeypatch this.
+
+    Kept out of the function signature deliberately: ADK's FunctionTool
+    introspects book_meeting to build the tool schema, and a parameter
+    annotated `Any` raises "typing.Any cannot be used with isinstance()"
+    at request time -- which import-level checks do not catch.
+    """
+    return httpx.Client(timeout=20.0)
 
 
 def _normalise_start(value: str) -> Optional[str]:
@@ -46,13 +57,7 @@ def _normalise_start(value: str) -> Optional[str]:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def book_meeting(
-    name: str,
-    email: str,
-    start_time: str,
-    topic: str = "",
-    _transport: Any = None,
-) -> dict:
+def book_meeting(name: str, email: str, start_time: str, topic: str = "") -> dict:
     """Book a meeting with Vishal.
 
     Args:
@@ -94,7 +99,7 @@ def book_meeting(
     }
 
     try:
-        with httpx.Client(timeout=20.0, transport=_transport) as client:
+        with _make_client() as client:
             r = client.post(CAL_API, json=payload, headers=headers)
     except httpx.HTTPError:
         return {"ok": False, "reason": "I couldn't reach the calendar just then - try again in a moment?"}
