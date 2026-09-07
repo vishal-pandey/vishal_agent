@@ -8,10 +8,18 @@ Supports both ADK web interface and A2A protocol.
 import os
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
-from dotenv import load_dotenv
+from datetime import datetime, timezone
+from pathlib import Path
 
-# Load environment variables
+from dotenv import load_dotenv
+from google.adk.tools import FunctionTool
+
+from .tools import book_meeting
+
+# Load environment variables. .env holds non-secret config and is tracked;
+# .env.local holds secrets, is gitignored, and wins where both define a key.
 load_dotenv()
+load_dotenv(Path(__file__).parent / ".env.local", override=True)
 
 # Configure Ollama - use ollama_chat provider for better tool support
 # The environment variable is required for LiteLLM to find Ollama
@@ -28,11 +36,27 @@ MODEL_API_BASE = os.environ.get("MODEL_API_BASE", "http://100.121.153.62:8080/v1
 # Create the ADK Agent
 # ============================================
 
+def _instruction_with_now(base: str) -> str:
+    """Prepend the current UTC time.
+
+    The model has no notion of "today", so without this a request for
+    "next Tuesday" resolves to a plausible but arbitrary date.
+    """
+    now = datetime.now(timezone.utc)
+    return (
+        f"The current date and time is {now.strftime('%A, %d %B %Y, %H:%M')} UTC.\n"
+        f"When booking, convert any relative time the visitor gives you "
+        f"(\"next Tuesday\", \"tomorrow at 3\") into an absolute ISO 8601 UTC "
+        f"timestamp based on that.\n\n"
+    ) + base
+
+
 root_agent = Agent(
     name="vishal_assistant",
     model=LiteLlm(model=MODEL, api_base=MODEL_API_BASE, api_key="not-needed"),
+    tools=[FunctionTool(book_meeting)],
     description="Vishal's witty AI sidekick - knows everything about him, answers with humor, and occasionally roasts him",
-    instruction="""
+    instruction=_instruction_with_now("""
 You are Vishal's AI assistant with a fun, witty personality. Think of yourself as his digital hype-man who can also roast him when asked.
 
 ## YOUR PERSONALITY 🎭
@@ -158,7 +182,7 @@ A: Hey! Ask me anything about Vishal - his work, projects, skills, or I can roas
 - side project habit: Has built far more side projects than he can count -- most work, some don't
 - homelab joke: His portfolio AI assistant jokes that it runs on a MacBook hiding in Vishal's closet -- that's his "homelab."
 - personal tagline: His portfolio introduces him as someone who "builds things that sometimes usually work" and jokes that he's "probably debugging something rn."
-""",
+"""),
 )
 
 # ============================================
