@@ -15,6 +15,12 @@ from dotenv import load_dotenv
 from google.adk.tools import FunctionTool
 
 from .tools import book_meeting
+from .tools.calcom import (
+    HOST_TZ,
+    WORKING_DAYS,
+    WORKING_HOURS_LOCAL,
+    WORKING_HOURS_UTC,
+)
 
 # Load environment variables. .env holds non-secret config and is tracked;
 # .env.local holds secrets, is gitignored, and wins where both define a key.
@@ -37,17 +43,28 @@ MODEL_API_BASE = os.environ.get("MODEL_API_BASE", "http://100.121.153.62:8080/v1
 # ============================================
 
 def _instruction_with_now(base: str) -> str:
-    """Prepend the current UTC time.
+    """Prepend the current time and the real bookable window.
 
-    The model has no notion of "today", so without this a request for
-    "next Tuesday" resolves to a plausible but arbitrary date.
+    Two things the model cannot know on its own:
+
+    1. What "today" is, so "next Tuesday" resolves to an actual date.
+    2. When Vishal is actually free. The calendar runs 09:00-17:00
+       Asia/Kolkata, which is 03:30-11:30 UTC -- so a visitor asking for
+       "afternoon" gets a UTC time that lands late evening IST and is
+       always rejected. Stating the window in both zones, and anchoring
+       bare times to IST, is what makes ordinary requests bookable.
     """
     now = datetime.now(timezone.utc)
     return (
         f"The current date and time is {now.strftime('%A, %d %B %Y, %H:%M')} UTC.\n"
-        f"When booking, convert any relative time the visitor gives you "
-        f"(\"next Tuesday\", \"tomorrow at 3\") into an absolute ISO 8601 UTC "
-        f"timestamp based on that.\n\n"
+        f"Vishal takes meetings {WORKING_DAYS}, {WORKING_HOURS_LOCAL} {HOST_TZ} "
+        f"(that is {WORKING_HOURS_UTC} UTC).\n"
+        f"When a visitor names a time without a timezone, read it as "
+        f"{HOST_TZ} and convert to UTC before booking. Convert relative times "
+        f'("tomorrow afternoon", "next Tuesday") to an absolute ISO 8601 UTC '
+        f"timestamp too.\n"
+        f"If a booking comes back with alternatives, offer those specific times "
+        f"rather than asking the visitor to guess again.\n\n"
     ) + base
 
 

@@ -11,18 +11,28 @@ conforms to the model, not the other way round.
 
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 
 CAL_API = "https://api.cal.com/v2/bookings"
-# Mandatory. Omitting it silently selects an older endpoint shape.
+CAL_SLOTS_API = "https://api.cal.com/v2/slots"
+# Mandatory, and DIFFERENT per endpoint. Omitting either silently selects an
+# older shape rather than erroring.
 CAL_API_VERSION = "2026-02-25"
+CAL_SLOTS_API_VERSION = "2024-09-04"
 
 USERNAME = "vishalpandey.ai"
 EVENT_TYPE_SLUG = "30min"
 ATTENDEE_TZ = "UTC"  # start_time is always ISO-8601 UTC; see module docstring
+
+# Bookable window, from the Cal.com "Working hours" schedule. Kept here so the
+# agent's instruction and this module cannot drift apart.
+HOST_TZ = "Asia/Kolkata"
+WORKING_HOURS_LOCAL = "09:00-17:00"
+WORKING_HOURS_UTC = "03:30-11:30"
+WORKING_DAYS = "Monday to Friday"
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]+$")
 
@@ -36,6 +46,61 @@ def _make_client() -> httpx.Client:
     at request time -- which import-level checks do not catch.
     """
     return httpx.Client(timeout=20.0)
+
+
+def _free_slots(client: httpx.Client, api_key: str, around_iso: str, limit: int = 4) -> list:
+    """Return up to `limit` genuinely free slots on the requested day.
+
+    Called only when a booking is rejected. A bare "that slot isn't free"
+    leaves the visitor guessing, and they usually guess outside the working
+    window again -- the times people ask for (afternoon) fall outside
+    09:00-17:00 IST once expressed in UTC.
+    """
+    day = around_iso[:10]
+    try:
+        r = client.get(
+            CAL_SLOTS_API,
+            params={"eventTypeSlug": EVENT_TYPE_SLUG, "username": USERNAME,
+                    "start": day, "end": day, "timeZone": "UTC"},
+            headers={"Authorization": f"Bearer {api_key}",
+                     "cal-api-version": CAL_SLOTS_API_VERSION},
+        )
+        if r.status_code != 200:
+            return []
+        data = (r.json() or {}).get("data") or {}
+    except (httpx.HTTPError, ValueError):
+        return []
+
+    out = []
+    for _, slots in sorted(data.items()):
+        for s in slots or []:
+            start = s.get("start") if isinstance(s, dict) else s
+            norm = _normalise_start(str(start))
+            if norm:
+                out.append({"utc": norm, "local": _to_host_local(norm)})
+    if len(out) <= limit:
+        return out
+    # Spread across the day. Taking the first N always offered the earliest
+    # morning slots, so a visitor asking for the afternoon was never shown one.
+    step = (len(out) - 1) / (limit - 1)
+    return [out[round(i * step)] for i in range(limit)]
+
+
+def _to_host_local(iso_utc: str) -> str:
+    """Render a UTC timestamp in the host's timezone, e.g. '2:00pm IST'.
+
+    Visitors think in Vishal's local time, the API speaks UTC. Handing the
+    model both removes the conversion step it gets wrong.
+    """
+    try:
+        dt = datetime.strptime(iso_utc, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return iso_utc
+    local = dt + timedelta(hours=5, minutes=30)  # Asia/Kolkata, no DST
+    hour = local.hour % 12 or 12
+    suffix = "am" if local.hour < 12 else "pm"
+    minute = f":{local.minute:02d}" if local.minute else ""
+    return f"{hour}{minute}{suffix} IST"
 
 
 def _normalise_start(value: str) -> Optional[str]:
@@ -101,28 +166,39 @@ def book_meeting(name: str, email: str, start_time: str, topic: str = "") -> dic
     try:
         with _make_client() as client:
             r = client.post(CAL_API, json=payload, headers=headers)
+
+            if r.status_code in (200, 201):
+                data = (r.json() or {}).get("data") or {}
+                return {
+                    "ok": True,
+                    "uid": data.get("uid"),
+                    "status": data.get("status", "accepted"),
+                    "starts_at": data.get("start", start),
+                }
+
+            detail = ""
+            try:
+                body = r.json()
+                detail = str(body.get("error", {}).get("message") or body.get("message") or "")
+            except ValueError:
+                detail = r.text[:200]
+
+            if r.status_code in (401, 403):
+                return {"ok": False, "reason": "Booking is not configured right now."}
+
+            low = detail.lower()
+            unavailable = (
+                r.status_code in (400, 409)
+                or "available" in low or "busy" in low or "slot" in low
+            )
+            alternatives = _free_slots(client, api_key, start) if unavailable else []
+            reason = (
+                f"I couldn't book that time - he takes meetings "
+                f"{WORKING_HOURS_LOCAL} IST, {WORKING_DAYS}, and that slot may "
+                f"already be taken."
+                if unavailable
+                else "The calendar wouldn't take that booking."
+            )
+            return {"ok": False, "reason": reason, "alternatives": alternatives}
     except httpx.HTTPError:
         return {"ok": False, "reason": "I couldn't reach the calendar just then - try again in a moment?"}
-
-    if r.status_code in (200, 201):
-        data = (r.json() or {}).get("data") or {}
-        return {
-            "ok": True,
-            "uid": data.get("uid"),
-            "status": data.get("status", "accepted"),
-            "starts_at": data.get("start", start),
-        }
-
-    detail = ""
-    try:
-        body = r.json()
-        detail = str(body.get("error", {}).get("message") or body.get("message") or "")
-    except Exception:
-        detail = r.text[:200]
-
-    low = detail.lower()
-    if r.status_code in (400, 409) or "available" in low or "busy" in low or "slot" in low:
-        return {"ok": False, "reason": "That slot isn't free - want to try another time?"}
-    if r.status_code in (401, 403):
-        return {"ok": False, "reason": "Booking is not configured right now."}
-    return {"ok": False, "reason": "The calendar wouldn't take that booking - try another time?"}

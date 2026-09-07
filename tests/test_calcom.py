@@ -66,7 +66,10 @@ def test_slot_unavailable_is_conversational_not_an_exception(monkeypatch):
     monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
     out = book_meeting(**GOOD)
     assert out["ok"] is False
-    assert "available" in out["reason"].lower() or "free" in out["reason"].lower()
+    r = out["reason"].lower()
+    # names the real constraint rather than a dead-end "not free"
+    assert "book" in r or "taken" in r
+    assert "09:00-17:00" in out["reason"]
 
 
 def test_bad_email_rejected_before_any_http_call(monkeypatch):
@@ -172,3 +175,91 @@ def test_agent_exposes_the_tool_and_its_schema():
     assert "book_meeting" in names
     tool = next(t for t in root_agent.tools if getattr(t, "name", None) == "book_meeting")
     assert tool._get_declaration() is not None
+
+
+# --- availability lookup on the failure path -------------------------------
+
+def test_unavailable_booking_offers_real_alternatives(monkeypatch):
+    """A dead-end rejection is useless; offer times that are actually free."""
+    def handler(request):
+        if request.url.path.endswith("/bookings"):
+            return httpx.Response(400, json={"error": {"message": "no_available_users_found_error"}})
+        return httpx.Response(200, json={"data": {"2026-09-10": [
+            {"start": "2026-09-10T03:30:00.000Z"},
+            {"start": "2026-09-10T08:30:00.000Z"},
+            {"start": "2026-09-10T09:00:00.000Z"},
+        ]}})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**GOOD)
+    assert out["ok"] is False
+    assert out["alternatives"], "must offer concrete free slots"
+    utcs = [a["utc"] for a in out["alternatives"]]
+    assert "2026-09-10T08:30:00Z" in utcs
+    locals_ = [a["local"] for a in out["alternatives"]]
+    assert "2pm IST" in locals_, f"expected a human IST label, got {locals_}"
+    assert len(out["alternatives"]) <= 4, "keep the list short enough to say aloud"
+
+
+def test_alternatives_lookup_failure_is_not_fatal(monkeypatch):
+    """If the slots call fails, still return a usable rejection."""
+    def handler(request):
+        if request.url.path.endswith("/bookings"):
+            return httpx.Response(400, json={"error": {"message": "unavailable"}})
+        raise httpx.ConnectError("slots down")
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**GOOD)
+    assert out["ok"] is False
+    assert out.get("alternatives") == []
+
+
+def test_slots_request_uses_its_own_api_version(monkeypatch):
+    """/slots and /bookings require DIFFERENT cal-api-version values."""
+    seen = {}
+
+    def handler(request):
+        if request.url.path.endswith("/bookings"):
+            return httpx.Response(400, json={"error": {"message": "unavailable"}})
+        seen["version"] = request.headers.get("cal-api-version")
+        seen["params"] = dict(request.url.params)
+        return httpx.Response(200, json={"data": {}})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    book_meeting(**GOOD)
+    assert seen["version"] == "2024-09-04"
+    assert seen["params"]["eventTypeSlug"] == "30min"
+    assert seen["params"]["username"] == "vishalpandey.ai"
+
+
+def test_successful_booking_does_not_look_up_slots(monkeypatch):
+    """Don't spend an API call on the happy path."""
+    calls = {"slots": 0}
+
+    def handler(request):
+        if request.url.path.endswith("/bookings"):
+            return httpx.Response(201, json={"data": {"uid": "u", "status": "accepted",
+                                                      "start": GOOD["start_time"]}})
+        calls["slots"] += 1
+        return httpx.Response(200, json={"data": {}})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    assert book_meeting(**GOOD)["ok"] is True
+    assert calls["slots"] == 0
+
+
+def test_alternatives_span_the_day_not_just_the_morning(monkeypatch):
+    """Offering the first four slots always meant 'morning', so an afternoon
+    request was never shown an afternoon option."""
+    slots = [{"start": f"2026-09-10T{h:02d}:{m:02d}:00.000Z"}
+             for h in range(3, 12) for m in (0, 30)]
+
+    def handler(request):
+        if request.url.path.endswith("/bookings"):
+            return httpx.Response(400, json={"error": {"message": "unavailable"}})
+        return httpx.Response(200, json={"data": {"2026-09-10": slots}})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    alts = book_meeting(**GOOD)["alternatives"]
+    hours = sorted(int(a["utc"][11:13]) for a in alts)
+    assert hours[0] <= 4 and hours[-1] >= 10, f"should span the day, got {hours}"
