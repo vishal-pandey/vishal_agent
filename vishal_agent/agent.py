@@ -181,9 +181,12 @@ def _calendar(now: datetime, days: int = 14) -> str:
     a resolved table turns "tomorrow" and "next Tuesday" into lookups.
     """
     lines = []
-    for offset in range(1, days + 1):
+    # Starts at today. It began at tomorrow once, and a visitor asking for
+    # "Today 2pm" was booked for tomorrow -- today was never on the list, and
+    # every training dialogue says "tomorrow".
+    for offset in range(0, days + 1):
         d = now + timedelta(days=offset)
-        label = " (tomorrow)" if offset == 1 else ""
+        label = {0: " (today)", 1: " (tomorrow)"}.get(offset, "")
         closed = "  -- weekend, no meetings" if d.weekday() >= 5 else ""
         lines.append(f"  {d:%A} {d:%Y-%m-%d}{label}{closed}")
     return "\n".join(lines)
@@ -206,7 +209,8 @@ def build_instruction(base: str = "") -> str:
         f"When a visitor names a time without a timezone, read it as "
         f"{HOST_TZ} and convert to UTC before booking.\n"
         f"Resolve every relative date against this calendar -- never guess a "
-        f"date, and never reuse a date from an earlier conversation:\n"
+        f"date, and never reuse a date from an earlier conversation. "
+        f"\"Today\" means today, not tomorrow:\n"
         f"{_calendar(now)}\n"
         f"If a booking comes back with alternatives, offer those specific times "
         f"rather than asking the visitor to guess again.\n"

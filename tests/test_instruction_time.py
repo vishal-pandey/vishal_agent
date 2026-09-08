@@ -86,3 +86,18 @@ def test_instruction_forbids_inventing_a_booking_link():
     text = build_instruction()
     assert "booking_url" in text
     assert "never write a link" in text.lower()
+
+
+def test_calendar_lists_today_as_bookable_when_it_is_a_weekday():
+    """A visitor asked for "Today 2pm" and was booked for tomorrow.
+
+    The calendar table began at tomorrow, so today was never presented as an
+    option -- and every booking dialogue the model was trained on says
+    "tomorrow". Today must be the first row, labelled, so "today" is a lookup.
+    """
+    text = build_instruction()
+    now = datetime.now(timezone.utc)
+    line = next((l for l in text.splitlines() if now.strftime("%Y-%m-%d") in l and "(today)" in l), None)
+    assert line is not None, "today must appear in the calendar table, labelled (today)"
+    table_dates = [l for l in text.splitlines() if l.startswith("  ") and "2026-" in l or l.startswith("  ") and "20" in l]
+    assert table_dates and "(today)" in table_dates[0], "today must be the FIRST row of the table"
