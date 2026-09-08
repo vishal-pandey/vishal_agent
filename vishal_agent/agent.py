@@ -8,6 +8,7 @@ Supports both ADK web interface and A2A protocol.
 import os
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
+from google.genai import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -217,6 +218,11 @@ def build_instruction(base: str = "") -> str:
 root_agent = Agent(
     name="vishal_assistant",
     model=LiteLlm(model=MODEL, api_base=MODEL_API_BASE, api_key="not-needed"),
+    # Deterministic decoding. The same booking request sampled 2026-09-09 once
+    # and 2026-09-16 another time -- the latter inside the date range the model
+    # memorised from its training data. Nothing here benefits from sampling:
+    # the job is to lift a name, an email and a timestamp onto a real calendar.
+    generate_content_config=types.GenerateContentConfig(temperature=0.0),
     tools=[FunctionTool(book_meeting)],
     description="Vishal's witty AI sidekick - knows everything about him, answers with humor, and occasionally roasts him",
     instruction=lambda ctx=None: build_instruction(),
