@@ -293,14 +293,24 @@ def test_repeat_confirmation_does_not_create_a_second_booking(monkeypatch):
     assert posts == [], "must not POST a duplicate booking"
 
 
-def test_a_different_time_same_day_reports_the_existing_booking(monkeypatch):
-    """Two meetings the same day is nearly always a mistake, not a request."""
-    posts = []
+def test_a_different_time_same_day_reschedules_the_existing_booking(monkeypatch):
+    """Same visitor, same day, different time = they changed their mind.
+
+    Two real cases: "tomorrow 4pm" booked, then "actually make it 10am"; and
+    the model booking a guessed slot before the visitor named one, then
+    calling again with the right time. Refusing the second call froze the
+    wrong time on the calendar. Rescheduling makes both self-correct.
+    """
+    posts, reschedules = [], []
 
     def handler(request):
         if request.url.path.endswith("/bookings") and request.method == "POST":
             posts.append(json.loads(request.content))
             return httpx.Response(201, json={"data": {"uid": "new", "status": "accepted",
+                                                      "start": "2026-09-10T09:00:00Z"}})
+        if request.url.path.endswith("/reschedule"):
+            reschedules.append((request.url.path, json.loads(request.content)))
+            return httpx.Response(201, json={"data": {"uid": "moved", "status": "accepted",
                                                       "start": "2026-09-10T09:00:00Z"}})
         return httpx.Response(200, json={"data": [
             {"uid": "already", "status": "accepted", "start": "2026-09-10T14:00:00.000Z",
@@ -309,9 +319,37 @@ def test_a_different_time_same_day_reports_the_existing_booking(monkeypatch):
     monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
     out = book_meeting(**{**GOOD, "start_time": "2026-09-10T09:00:00Z"})
     assert out["ok"] is True
+    assert out.get("rescheduled") is True
+    assert out["uid"] == "moved"
+    assert out["starts_at"] == "2026-09-10T09:00:00Z"
+    assert out["booking_url"] == "https://cal.com/booking/moved"
+    assert "2:30pm IST" in out["reason"] and "7:30pm IST" in out["reason"], out["reason"]
+    assert posts == [], "must not create a second booking"
+    assert reschedules and reschedules[0][0].endswith("/bookings/already/reschedule")
+    assert reschedules[0][1]["start"] == "2026-09-10T09:00:00Z"
+
+
+def test_reschedule_failure_falls_back_to_reporting_the_existing_booking(monkeypatch):
+    """If Cal.com refuses the move, say what IS booked rather than double-book."""
+    posts = []
+
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            posts.append(1)
+            return httpx.Response(201, json={"data": {"uid": "new", "status": "accepted",
+                                                      "start": "2026-09-10T09:00:00Z"}})
+        if request.url.path.endswith("/reschedule"):
+            return httpx.Response(400, json={"error": {"message": "slot unavailable"}})
+        return httpx.Response(200, json={"data": [
+            {"uid": "already", "status": "accepted", "start": "2026-09-10T14:00:00.000Z",
+             "attendees": [{"email": "priya@acme.io"}]}]})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**{**GOOD, "start_time": "2026-09-10T09:00:00Z"})
+    assert out["ok"] is True
     assert out.get("already_booked") is True
-    assert "7:30pm IST" in out["reason"] or "2026-09-10" in out["reason"]
-    assert posts == [], "must not add a second meeting on a day already booked"
+    assert out["uid"] == "already"
+    assert posts == []
 
 
 def test_a_different_day_books_normally(monkeypatch):

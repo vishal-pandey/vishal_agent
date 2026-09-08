@@ -26,6 +26,7 @@ CAL_LIST_API_VERSION = "2024-08-13"
 # Handed back on success so the model relays a real link instead of
 # inventing one -- a live booking produced a misspelled, non-existent host.
 BOOKING_URL = "https://cal.com/booking/{uid}"
+CAL_RESCHEDULE_API = "https://api.cal.com/v2/bookings/{uid}/reschedule"
 
 USERNAME = "vishalpandey.ai"
 EVENT_TYPE_SLUG = "30min"
@@ -166,6 +167,25 @@ def _existing_booking(client: httpx.Client, api_key: str, email: str, start_iso:
     return None
 
 
+def _reschedule(client: httpx.Client, api_key: str, uid: str, start_iso: str):
+    """Move an existing booking to `start_iso`. Returns the new booking dict or None."""
+    try:
+        r = client.post(
+            CAL_RESCHEDULE_API.format(uid=uid),
+            json={"start": start_iso, "reschedulingReason": "Visitor changed the time in chat"},
+            headers={"Authorization": f"Bearer {api_key}",
+                     "cal-api-version": CAL_LIST_API_VERSION,
+                     "Content-Type": "application/json"},
+        )
+        if r.status_code not in (200, 201):
+            return None
+        data = (r.json() or {}).get("data") or {}
+    except (httpx.HTTPError, ValueError):
+        return None
+    norm = _normalise_start(str(data.get("start", start_iso))) or start_iso
+    return {"uid": data.get("uid", uid), "status": data.get("status", "accepted"), "start": norm}
+
+
 def book_meeting(name: str, email: str, start_time: str, topic: str = "") -> dict:
     """Book a meeting with Vishal.
 
@@ -210,6 +230,24 @@ def book_meeting(name: str, email: str, start_time: str, topic: str = "") -> dic
     try:
         with _make_client() as client:
             dup = _existing_booking(client, api_key, email.strip(), start)
+            if dup is not None and dup["start"] != start:
+                # Same visitor, same day, different time: they changed their
+                # mind ("actually make it 10am"), or the model booked a guess
+                # before they named a time and is now correcting it. Refusing
+                # here froze the wrong time on the calendar. Move it instead.
+                moved = _reschedule(client, api_key, dup["uid"], start)
+                if moved is not None:
+                    return {
+                        "ok": True,
+                        "uid": moved["uid"],
+                        "status": moved["status"],
+                        "starts_at": moved["start"],
+                        "booking_url": BOOKING_URL.format(uid=moved["uid"]),
+                        "rescheduled": True,
+                        "reason": f"Moved your meeting from "
+                                  f"{_to_host_local(dup['start'])} to "
+                                  f"{_to_host_local(moved['start'])} on {moved['start'][:10]}.",
+                    }
             if dup is not None:
                 return {
                     "ok": True,
