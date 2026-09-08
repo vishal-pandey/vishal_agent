@@ -263,3 +263,110 @@ def test_alternatives_span_the_day_not_just_the_morning(monkeypatch):
     alts = book_meeting(**GOOD)["alternatives"]
     hours = sorted(int(a["utc"][11:13]) for a in alts)
     assert hours[0] <= 4 and hours[-1] >= 10, f"should span the day, got {hours}"
+
+
+# --- duplicate guard ---------------------------------------------------------
+
+def test_repeat_confirmation_does_not_create_a_second_booking(monkeypatch):
+    """A visitor who says "yes" after it is already booked must not be double-booked.
+
+    Seen in the multi-turn eval: the model books correctly, the tool succeeds,
+    and the next "yes book it" makes a SECOND call -- which would put two events
+    on the calendar for one meeting.
+    """
+    posts = []
+
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            posts.append(json.loads(request.content))
+            return httpx.Response(201, json={"data": {"uid": "new", "status": "accepted",
+                                                      "start": GOOD["start_time"]}})
+        return httpx.Response(200, json={"data": [
+            {"uid": "already", "status": "accepted", "start": "2026-09-10T14:00:00.000Z",
+             "attendees": [{"email": "priya@acme.io"}]}]})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**GOOD)
+    assert out["ok"] is True
+    assert out["uid"] == "already", "must return the existing booking, not create one"
+    assert out.get("already_booked") is True
+    assert posts == [], "must not POST a duplicate booking"
+
+
+def test_a_different_time_same_day_reports_the_existing_booking(monkeypatch):
+    """Two meetings the same day is nearly always a mistake, not a request."""
+    posts = []
+
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            posts.append(json.loads(request.content))
+            return httpx.Response(201, json={"data": {"uid": "new", "status": "accepted",
+                                                      "start": "2026-09-10T09:00:00Z"}})
+        return httpx.Response(200, json={"data": [
+            {"uid": "already", "status": "accepted", "start": "2026-09-10T14:00:00.000Z",
+             "attendees": [{"email": "priya@acme.io"}]}]})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**{**GOOD, "start_time": "2026-09-10T09:00:00Z"})
+    assert out["ok"] is True
+    assert out.get("already_booked") is True
+    assert "7:30pm IST" in out["reason"] or "2026-09-10" in out["reason"]
+    assert posts == [], "must not add a second meeting on a day already booked"
+
+
+def test_a_different_day_books_normally(monkeypatch):
+    """The guard must not block someone booking a genuine second meeting later."""
+    posts = []
+
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            posts.append(json.loads(request.content))
+            return httpx.Response(201, json={"data": {"uid": "new", "status": "accepted",
+                                                      "start": "2026-09-17T08:30:00Z"}})
+        return httpx.Response(200, json={"data": [
+            {"uid": "already", "status": "accepted", "start": "2026-09-10T14:00:00.000Z",
+             "attendees": [{"email": "priya@acme.io"}]}]})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**{**GOOD, "start_time": "2026-09-17T08:30:00Z"})
+    assert out["ok"] is True
+    assert out["uid"] == "new"
+    assert not out.get("already_booked")
+    assert len(posts) == 1
+
+
+def test_a_different_visitor_is_unaffected(monkeypatch):
+    """The guard keys on the attendee's email, not on the day being busy."""
+    posts = []
+
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            posts.append(json.loads(request.content))
+            return httpx.Response(201, json={"data": {"uid": "new", "status": "accepted",
+                                                      "start": GOOD["start_time"]}})
+        return httpx.Response(200, json={"data": [
+            {"uid": "someone-else", "status": "accepted", "start": "2026-09-10T14:00:00.000Z",
+             "attendees": [{"email": "other@person.io"}]}]})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**{**GOOD, "email": "priya@acme.io"})
+    assert out["ok"] is True
+    assert out["uid"] == "new"
+    assert len(posts) == 1
+
+
+def test_duplicate_lookup_failure_does_not_block_the_booking(monkeypatch):
+    """If the lookup fails, book anyway -- a missed booking is worse than a rare dup."""
+    posts = []
+
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            posts.append(json.loads(request.content))
+            return httpx.Response(201, json={"data": {"uid": "new", "status": "accepted",
+                                                      "start": GOOD["start_time"]}})
+        raise httpx.ConnectError("lookup down")
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**GOOD)
+    assert out["ok"] is True
+    assert len(posts) == 1

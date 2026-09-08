@@ -8,7 +8,7 @@ Supports both ADK web interface and A2A protocol.
 import os
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -42,38 +42,7 @@ MODEL_API_BASE = os.environ.get("MODEL_API_BASE", "http://100.121.153.62:8080/v1
 # Create the ADK Agent
 # ============================================
 
-def _instruction_with_now(base: str) -> str:
-    """Prepend the current time and the real bookable window.
-
-    Two things the model cannot know on its own:
-
-    1. What "today" is, so "next Tuesday" resolves to an actual date.
-    2. When Vishal is actually free. The calendar runs 09:00-17:00
-       Asia/Kolkata, which is 03:30-11:30 UTC -- so a visitor asking for
-       "afternoon" gets a UTC time that lands late evening IST and is
-       always rejected. Stating the window in both zones, and anchoring
-       bare times to IST, is what makes ordinary requests bookable.
-    """
-    now = datetime.now(timezone.utc)
-    return (
-        f"The current date and time is {now.strftime('%A, %d %B %Y, %H:%M')} UTC.\n"
-        f"Vishal takes meetings {WORKING_DAYS}, {WORKING_HOURS_LOCAL} {HOST_TZ} "
-        f"(that is {WORKING_HOURS_UTC} UTC).\n"
-        f"When a visitor names a time without a timezone, read it as "
-        f"{HOST_TZ} and convert to UTC before booking. Convert relative times "
-        f'("tomorrow afternoon", "next Tuesday") to an absolute ISO 8601 UTC '
-        f"timestamp too.\n"
-        f"If a booking comes back with alternatives, offer those specific times "
-        f"rather than asking the visitor to guess again.\n\n"
-    ) + base
-
-
-root_agent = Agent(
-    name="vishal_assistant",
-    model=LiteLlm(model=MODEL, api_base=MODEL_API_BASE, api_key="not-needed"),
-    tools=[FunctionTool(book_meeting)],
-    description="Vishal's witty AI sidekick - knows everything about him, answers with humor, and occasionally roasts him",
-    instruction=_instruction_with_now("""
+_PERSONA = """
 You are Vishal's AI assistant with a fun, witty personality. Think of yourself as his digital hype-man who can also roast him when asked.
 
 ## YOUR PERSONALITY 🎭
@@ -199,7 +168,56 @@ A: Hey! Ask me anything about Vishal - his work, projects, skills, or I can roas
 - side project habit: Has built far more side projects than he can count -- most work, some don't
 - homelab joke: His portfolio AI assistant jokes that it runs on a MacBook hiding in Vishal's closet -- that's his "homelab."
 - personal tagline: His portfolio introduces him as someone who "builds things that sometimes usually work" and jokes that he's "probably debugging something rn."
-"""),
+"""
+
+
+def _calendar(now: datetime, days: int = 14) -> str:
+    """Spell out the next `days` dates so the model never does date arithmetic.
+
+    It was trained on booking dialogues whose dates all sat in a five-day
+    window (build_data.py used one `base` date), so it partly memorised that
+    range: a real request for "tomorrow" was booked as 2026-09-19. Handing it
+    a resolved table turns "tomorrow" and "next Tuesday" into lookups.
+    """
+    lines = []
+    for offset in range(1, days + 1):
+        d = now + timedelta(days=offset)
+        label = " (tomorrow)" if offset == 1 else ""
+        closed = "  -- weekend, no meetings" if d.weekday() >= 5 else ""
+        lines.append(f"  {d:%A} {d:%Y-%m-%d}{label}{closed}")
+    return "\n".join(lines)
+
+
+def build_instruction(base: str = "") -> str:
+    """Compose the full instruction against the CURRENT time.
+
+    Passed to Agent as a callable rather than a string: a string is evaluated
+    once at import, so a pod that had been up for a week kept telling the model
+    it was the day it started.
+    """
+    now = datetime.now(timezone.utc)
+    tomorrow = now + timedelta(days=1)
+    return (
+        f"The current date and time is {now.strftime('%A, %d %B %Y, %H:%M')} UTC.\n"
+        f"Today is {now:%A} {now:%Y-%m-%d}. Tomorrow is {tomorrow:%A} {tomorrow:%Y-%m-%d}.\n"
+        f"Vishal takes meetings {WORKING_DAYS}, {WORKING_HOURS_LOCAL} {HOST_TZ} "
+        f"(that is {WORKING_HOURS_UTC} UTC).\n"
+        f"When a visitor names a time without a timezone, read it as "
+        f"{HOST_TZ} and convert to UTC before booking.\n"
+        f"Resolve every relative date against this calendar -- never guess a "
+        f"date, and never reuse a date from an earlier conversation:\n"
+        f"{_calendar(now)}\n"
+        f"If a booking comes back with alternatives, offer those specific times "
+        f"rather than asking the visitor to guess again.\n\n"
+    ) + (base or _PERSONA)
+
+
+root_agent = Agent(
+    name="vishal_assistant",
+    model=LiteLlm(model=MODEL, api_base=MODEL_API_BASE, api_key="not-needed"),
+    tools=[FunctionTool(book_meeting)],
+    description="Vishal's witty AI sidekick - knows everything about him, answers with humor, and occasionally roasts him",
+    instruction=lambda ctx=None: build_instruction(),
 )
 
 # ============================================

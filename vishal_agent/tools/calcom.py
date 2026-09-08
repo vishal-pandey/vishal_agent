@@ -22,6 +22,7 @@ CAL_SLOTS_API = "https://api.cal.com/v2/slots"
 # older shape rather than erroring.
 CAL_API_VERSION = "2026-02-25"
 CAL_SLOTS_API_VERSION = "2024-09-04"
+CAL_LIST_API_VERSION = "2024-08-13"
 
 USERNAME = "vishalpandey.ai"
 EVENT_TYPE_SLUG = "30min"
@@ -122,6 +123,46 @@ def _normalise_start(value: str) -> Optional[str]:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _existing_booking(client: httpx.Client, api_key: str, email: str, start_iso: str):
+    """Return this visitor's upcoming booking on the same day, if there is one.
+
+    The model re-books when a visitor confirms a meeting that is already made
+    ("yes book it" after the tool already succeeded), which would put two
+    events on the calendar for one conversation. Cheaper to notice here than
+    to ask the model not to.
+
+    Returns None on any lookup failure: a missed booking is a worse outcome
+    than an occasional duplicate, so this never blocks the happy path.
+    """
+    try:
+        r = client.get(
+            CAL_API,
+            params={"status": "upcoming", "attendeeEmail": email},
+            headers={"Authorization": f"Bearer {api_key}",
+                     "cal-api-version": CAL_LIST_API_VERSION},
+        )
+        if r.status_code != 200:
+            return None
+        rows = (r.json() or {}).get("data") or []
+    except (httpx.HTTPError, ValueError):
+        return None
+
+    day = start_iso[:10]
+    for b in rows:
+        if not isinstance(b, dict):
+            continue
+        # attendeeEmail is a server-side filter on some plans and a no-op on
+        # others, so confirm the match here rather than trusting it.
+        emails = {str((a or {}).get("email", "")).lower()
+                  for a in (b.get("attendees") or [])}
+        if email.lower() not in emails:
+            continue
+        norm = _normalise_start(str(b.get("start", "")))
+        if norm and norm[:10] == day:
+            return {"uid": b.get("uid"), "status": b.get("status", "accepted"), "start": norm}
+    return None
+
+
 def book_meeting(name: str, email: str, start_time: str, topic: str = "") -> dict:
     """Book a meeting with Vishal.
 
@@ -165,6 +206,19 @@ def book_meeting(name: str, email: str, start_time: str, topic: str = "") -> dic
 
     try:
         with _make_client() as client:
+            dup = _existing_booking(client, api_key, email.strip(), start)
+            if dup is not None:
+                return {
+                    "ok": True,
+                    "uid": dup["uid"],
+                    "status": dup["status"],
+                    "starts_at": dup["start"],
+                    "already_booked": True,
+                    "reason": f"You are already booked with Vishal at "
+                              f"{_to_host_local(dup['start'])} on {dup['start'][:10]} "
+                              f"- no need to book again.",
+                }
+
             r = client.post(CAL_API, json=payload, headers=headers)
 
             if r.status_code in (200, 201):
