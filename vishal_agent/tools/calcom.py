@@ -23,6 +23,9 @@ CAL_SLOTS_API = "https://api.cal.com/v2/slots"
 CAL_API_VERSION = "2026-02-25"
 CAL_SLOTS_API_VERSION = "2024-09-04"
 CAL_LIST_API_VERSION = "2024-08-13"
+# Handed back on success so the model relays a real link instead of
+# inventing one -- a live booking produced a misspelled, non-existent host.
+BOOKING_URL = "https://cal.com/booking/{uid}"
 
 USERNAME = "vishalpandey.ai"
 EVENT_TYPE_SLUG = "30min"
@@ -213,6 +216,7 @@ def book_meeting(name: str, email: str, start_time: str, topic: str = "") -> dic
                     "uid": dup["uid"],
                     "status": dup["status"],
                     "starts_at": dup["start"],
+                    "booking_url": BOOKING_URL.format(uid=dup["uid"]),
                     "already_booked": True,
                     "reason": f"You are already booked with Vishal at "
                               f"{_to_host_local(dup['start'])} on {dup['start'][:10]} "
@@ -228,6 +232,7 @@ def book_meeting(name: str, email: str, start_time: str, topic: str = "") -> dic
                     "uid": data.get("uid"),
                     "status": data.get("status", "accepted"),
                     "starts_at": data.get("start", start),
+                    "booking_url": BOOKING_URL.format(uid=data.get("uid")),
                 }
 
             detail = ""

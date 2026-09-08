@@ -208,7 +208,9 @@ def build_instruction(base: str = "") -> str:
         f"date, and never reuse a date from an earlier conversation:\n"
         f"{_calendar(now)}\n"
         f"If a booking comes back with alternatives, offer those specific times "
-        f"rather than asking the visitor to guess again.\n\n"
+        f"rather than asking the visitor to guess again.\n"
+        f"When a booking succeeds, give the visitor the booking_url the tool "
+        f"returned, copied exactly. Never write a link the tool did not give you.\n\n"
     ) + (base or _PERSONA)
 
 

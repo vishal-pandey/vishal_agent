@@ -79,3 +79,10 @@ def test_instruction_still_carries_the_facts_and_the_working_window():
     assert "Asia/Kolkata" in text
     assert "Lumiq" in text                # the fact block survived
     assert "contact@vishalpandey.ai" in text
+
+
+def test_instruction_forbids_inventing_a_booking_link():
+    """A live booking produced a link to a host that does not exist."""
+    text = build_instruction()
+    assert "booking_url" in text
+    assert "never write a link" in text.lower()

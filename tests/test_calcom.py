@@ -370,3 +370,34 @@ def test_duplicate_lookup_failure_does_not_block_the_booking(monkeypatch):
     out = book_meeting(**GOOD)
     assert out["ok"] is True
     assert len(posts) == 1
+
+
+def test_success_returns_a_real_booking_url(monkeypatch):
+    """Without one the model invents a link.
+
+    A live booking produced "https://vishal-agent.codesshare.co.in/bookings/<uid>"
+    -- a hostname that does not exist, with the domain misspelled. Handing it
+    the real URL is the same fix as handing it the date: remove the guess.
+    """
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            return httpx.Response(201, json={"data": {"uid": "abc123", "status": "accepted",
+                                                      "start": GOOD["start_time"]}})
+        return httpx.Response(200, json={"data": []})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**GOOD)
+    assert out["booking_url"] == "https://cal.com/booking/abc123"
+
+
+def test_already_booked_also_carries_the_url(monkeypatch):
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            raise AssertionError("must not book a duplicate")
+        return httpx.Response(200, json={"data": [
+            {"uid": "already", "status": "accepted", "start": "2026-09-10T14:00:00.000Z",
+             "attendees": [{"email": "priya@acme.io"}]}]})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**GOOD)
+    assert out["booking_url"] == "https://cal.com/booking/already"
