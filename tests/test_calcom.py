@@ -439,3 +439,50 @@ def test_already_booked_also_carries_the_url(monkeypatch):
     monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
     out = book_meeting(**GOOD)
     assert out["booking_url"] == "https://cal.com/booking/already"
+
+
+# --- timeout after commit ----------------------------------------------------
+
+def test_timeout_on_post_recovers_the_booking_if_it_landed(monkeypatch):
+    """A live booking was CREATED on Cal.com but the tool said "couldn't reach
+    the calendar": the POST committed server-side and the response outran the
+    client timeout. Before reporting failure, look the booking up."""
+    lookups = {"n": 0}
+
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            raise httpx.ReadTimeout("slow calendar")
+        lookups["n"] += 1
+        if lookups["n"] == 1:               # the pre-flight duplicate check: nothing yet
+            return httpx.Response(200, json={"data": []})
+        return httpx.Response(200, json={"data": [   # after the timeout: it's there
+            {"uid": "landed", "status": "accepted", "start": "2026-09-10T14:00:00.000Z",
+             "attendees": [{"email": "priya@acme.io"}]}]})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**GOOD)
+    assert out["ok"] is True, out
+    assert out["uid"] == "landed"
+    assert out["booking_url"] == "https://cal.com/booking/landed"
+    assert out.get("recovered") is True
+
+
+def test_timeout_on_post_with_nothing_landed_is_still_a_clear_failure(monkeypatch):
+    def handler(request):
+        if request.url.path.endswith("/bookings") and request.method == "POST":
+            raise httpx.ReadTimeout("slow calendar")
+        return httpx.Response(200, json={"data": []})
+    _patch(monkeypatch, handler)
+    monkeypatch.setenv("CALCOM_API_KEY", "cal_live_test")
+    out = book_meeting(**GOOD)
+    assert out["ok"] is False
+    assert "reach" in out["reason"].lower() or "try" in out["reason"].lower()
+
+
+def test_client_timeout_is_generous_enough_for_booking_creation():
+    """Cal.com creates a video room and sends invites inside the POST; 20 s was
+    exceeded in production."""
+    from vishal_agent.tools.calcom import _make_client
+    with _make_client() as c:
+        assert c.timeout.read >= 60, f"read timeout {c.timeout.read}s is too short for booking creation"
+        assert c.timeout.connect is not None and c.timeout.connect <= 15

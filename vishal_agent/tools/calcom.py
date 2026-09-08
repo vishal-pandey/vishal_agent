@@ -50,7 +50,10 @@ def _make_client() -> httpx.Client:
     annotated `Any` raises "typing.Any cannot be used with isinstance()"
     at request time -- which import-level checks do not catch.
     """
-    return httpx.Client(timeout=20.0)
+    # Booking creation makes a video room and sends invites inside the POST;
+    # 20 s was exceeded in production and a real booking was reported as a
+    # failure. Connect stays short so an unreachable host fails fast.
+    return httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0))
 
 
 def _free_slots(client: httpx.Client, api_key: str, around_iso: str, limit: int = 4) -> list:
@@ -261,7 +264,23 @@ def book_meeting(name: str, email: str, start_time: str, topic: str = "") -> dic
                               f"- no need to book again.",
                 }
 
-            r = client.post(CAL_API, json=payload, headers=headers)
+            try:
+                r = client.post(CAL_API, json=payload, headers=headers)
+            except httpx.HTTPError:
+                # The request may have committed before the response was lost.
+                # Look before claiming failure: a visitor told "couldn't reach the
+                # calendar" while an invite lands in their inbox books twice.
+                landed = _existing_booking(client, api_key, email.strip(), start)
+                if landed is not None and landed["start"] == start:
+                    return {
+                        "ok": True,
+                        "uid": landed["uid"],
+                        "status": landed["status"],
+                        "starts_at": landed["start"],
+                        "booking_url": BOOKING_URL.format(uid=landed["uid"]),
+                        "recovered": True,
+                    }
+                raise
 
             if r.status_code in (200, 201):
                 data = (r.json() or {}).get("data") or {}
