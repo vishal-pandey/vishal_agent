@@ -101,3 +101,12 @@ def test_calendar_lists_today_as_bookable_when_it_is_a_weekday():
     assert line is not None, "today must appear in the calendar table, labelled (today)"
     table_dates = [l for l in text.splitlines() if l.startswith("  ") and "2026-" in l or l.startswith("  ") and "20" in l]
     assert table_dates and "(today)" in table_dates[0], "today must be the FIRST row of the table"
+
+
+def test_instruction_forbids_booking_without_a_specific_time():
+    """Given only a name and email, or a vague "afternoon", the retrained model
+    booked a guessed slot immediately -- and the duplicate guard then made that
+    guess stick when the visitor named the real time. Ask first."""
+    text = build_instruction().lower()
+    assert "specific time" in text
+    assert "do not call book_meeting" in text or "never book" in text
