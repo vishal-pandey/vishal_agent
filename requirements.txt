@@ -17,4 +17,4 @@ gunicorn>=23.0.0
 
 # Database session storage (PostgreSQL)
 asyncpg>=0.29.0
-sqlalchemy>=2.0.0
+sqlalchemy[asyncio]>=2.0.0  # [asyncio] = greenlet, required by DatabaseSessionService

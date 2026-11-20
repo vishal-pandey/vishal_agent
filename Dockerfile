@@ -20,10 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY requirements.txt constraints.txt ./
 
-# Install Python dependencies (including gunicorn for production)
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+# Install Python dependencies (including gunicorn for production), pinned to the
+# known-good package set in constraints.txt
+RUN pip install --no-cache-dir -r requirements.txt gunicorn -c constraints.txt
 
 # Copy application code
 COPY vishal_agent/ ./vishal_agent/
