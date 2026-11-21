@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Visit replay · vishalpandey.ai</title>
+<link rel="stylesheet" href="/replay-static/rrweb-player-2.2.2.min.css">
+<style>
+  :root { color-scheme: light dark; --bg: #f6f3ee; --ink: #2b2733; --muted: #6f6a78; --line: #ddd6cc; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1d1b22; --ink: #eeeaf2; --muted: #a39dad; --line: #3a3642; } }
+  body { margin: 0; padding: 20px 16px 40px; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1140px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: var(--muted); margin: 0; font-size: 13px; }
+  #replay-status { margin: 12px 0 0; }
+  .replay-box { margin-top: 12px; max-width: 100%; overflow: hidden; }
+  .replay-box .rr-player { box-shadow: none; border: 1px solid var(--line); float: none; margin: 0 auto; }
+  .replay-box .rr-controller { -webkit-user-select: none; user-select: none; }
+  /* iPhone Safari has no fullscreen for page elements: the expand button fills the window instead */
+  .replay-box.rr-max { position: fixed; inset: 0; z-index: 1000; margin: 0; background: #fff;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .replay-box.rr-max .rr-player { border: 0; }
+  body.rr-locked { overflow: hidden; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Visit replay · vishalpandey.ai</h1>
+  <p class="muted">Recording {{RID}}. Typed values are hidden and mouse movement is not recorded; taps, clicks and scrolls are. Idle gaps are skipped. Kept for 30 days.</p>
+  <p id="replay-status" class="muted">Loading the recording…</p>
+  <div id="replay" class="replay-box"></div>
+</main>
+<script src="/replay-static/rrweb-player-2.2.2.min.js"></script>
+<script>
+(function () {
+  var st = document.getElementById("replay-status"), box = document.getElementById("replay");
+  fetch("/replay/{{RID}}/events?k={{K}}", {credentials: "omit"}).then(function (r) { return r.json(); }).then(function (ev) {
+    if (!ev.length) { st.textContent = "Nothing recorded for this visit yet (the visitor left within 2 seconds, blocked it, or the recording is older than 30 days). Batches arrive every 5 seconds, so a visit in progress shows up after a reload."; return; }
+    var pages = ev.filter(function (e) { return e.type === 4; }).length, secs = Math.round((ev[ev.length - 1].timestamp - ev[0].timestamp) / 1000);
+    st.textContent = pages + (pages === 1 ? " page load" : " page loads") + " · " + Math.floor(secs / 60) + " min " + (secs % 60) + " s";
+    var w = Math.min(box.clientWidth || 960, 1140), h = Math.round(Math.min(window.innerHeight * 0.75, w * 0.75));
+    var player = new rrwebPlayer({target: box, props: {events: ev, width: w, height: h,
+      autoPlay: false, skipInactive: true, speedOption: [1, 2, 4, 8], mouseTail: false}});
+    var native = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+    if (!native) {
+      var maxed = false;
+      var size = function () {
+        var ctl = box.querySelector(".rr-controller"), ch = ctl ? ctl.offsetHeight : 80;
+        if (maxed) player.$set({width: box.clientWidth, height: Math.max(200, box.clientHeight - ch)});
+        else player.$set({width: w, height: h});
+        player.triggerResize();
+      };
+      box.addEventListener("click", function (e) {
+        var btns = box.querySelectorAll(".rr-controller__btns button"), fs = btns[btns.length - 1];
+        if (!fs || !fs.contains(e.target)) return;
+        e.stopPropagation(); e.preventDefault();
+        maxed = !maxed; box.classList.toggle("rr-max", maxed); document.body.classList.toggle("rr-locked", maxed);
+        requestAnimationFrame(size);
+      }, true);
+      window.addEventListener("resize", function () { if (maxed) requestAnimationFrame(size); });
+    }
+  }).catch(function () { st.textContent = "Could not load the recording."; });
+})();
+</script>
+</body>
+</html>

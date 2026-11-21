@@ -52,7 +52,7 @@ def _clip(text: str, limit: int) -> str:
 
 
 def format_turn(question: str, answer: str, session_id: str, turn: int,
-                country: str = "", finished: bool = True) -> str:
+                country: str = "", finished: bool = True, replay: str = "") -> str:
     """The group message for one chat turn."""
     head = "💬 *New chat on vishalpandey.ai*" if turn <= 1 else f"💬 *Chat continued* · message {turn}"
     if answer:
@@ -60,7 +60,8 @@ def format_turn(question: str, answer: str, session_id: str, turn: int,
     else:
         reply = "_no answer: the visitor left or the model errored_"
     meta = " · ".join(x for x in (f"🌍 {country}" if country else "", f"🧵 {session_id}") if x)
-    return f"{head}\n❓ {_clip(question, QUESTION_MAX)}\n🤖 {reply}\n{meta}"
+    watch = f"\n▶️ Watch the visit: {replay}" if replay else ""
+    return f"{head}\n❓ {_clip(question, QUESTION_MAX)}\n🤖 {reply}\n{meta}{watch}"
 
 
 def allow(now: float | None = None) -> bool:
@@ -96,7 +97,7 @@ async def _safe(text: str) -> None:
 
 
 def chat_turn(question: str, answer: str, session_id: str, turn: int,
-              country: str = "", finished: bool = True) -> bool:
+              country: str = "", finished: bool = True, replay: str = "") -> bool:
     """Post one chat turn to the group. Returns True if an alert was queued."""
     if not enabled() or not (question or "").strip() or not allow():
         return False
@@ -104,7 +105,7 @@ def chat_turn(question: str, answer: str, session_id: str, turn: int,
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return False
-    t = loop.create_task(_safe(format_turn(question, answer, session_id, turn, country, finished)))
+    t = loop.create_task(_safe(format_turn(question, answer, session_id, turn, country, finished, replay)))
     _tasks.add(t)
     t.add_done_callback(_tasks.discard)
     return True

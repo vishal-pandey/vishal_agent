@@ -17,6 +17,7 @@ For development:
     uvicorn vishal_agent.server:app --reload
 """
 
+import asyncio
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -31,7 +32,7 @@ from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.genai import types
 
 from .agent import root_agent
-from . import notify
+from . import notify, replays
 
 # ============================================
 # Session Management
@@ -106,6 +107,7 @@ class RunRequest(BaseModel):
     session_id: str | None = None
     new_message: Message
     streaming: bool = False
+    replay: str | None = None  # the visit's recording id (replays.py), for the WhatsApp alert's link
 
 class SessionCreateRequest(BaseModel):
     user_id: str = "default_user"
@@ -120,7 +122,11 @@ async def lifespan(app: FastAPI):
     # Startup
     print(f"🚀 Starting ADK Agent Server: {root_agent.name}")
     print(f"📡 Ollama API Base: {os.environ.get('OLLAMA_API_BASE', 'not set')}")
+    print(f"🎬 Session replay: {'on' if replays.enabled() else 'off'}")
+    cleanup = asyncio.create_task(replays.cleanup_forever()) if replays.enabled() else None
     yield
+    if cleanup:
+        cleanup.cancel()
     # Shutdown
     print("👋 Shutting down ADK Agent Server")
 
@@ -136,6 +142,8 @@ app = FastAPI(
 )
 
 # CORS middleware for cross-origin requests
+app.include_router(replays.router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Configure appropriately for production
@@ -225,7 +233,7 @@ async def run_agent(request: RunRequest, http_request: Request):
             raise
 
     notify.chat_turn(question_text(request.new_message), final_response or "", session_id, turn,
-                     visitor_country(http_request))
+                     visitor_country(http_request), replay=replays.link(request.replay or ""))
 
     return {
         "session_id": session_id,
@@ -330,7 +338,7 @@ async def run_agent_sse(request: RunRequest, http_request: Request):
         finally:
             # Runs on completion and when the visitor closes the tab mid-stream
             notify.chat_turn(question_text(request.new_message), tracker.answer, session_id, turn,
-                             country, finished=tracker.finished)
+                             country, finished=tracker.finished, replay=replays.link(request.replay or ""))
     
     return StreamingResponse(
         event_generator(),
